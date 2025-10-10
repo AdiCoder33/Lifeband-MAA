@@ -137,3 +137,23 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# React Native
+.DS_Store
+android/.gradle
+android/app/build/
+android/build/
+android/.cxx/
+android/local.properties
+android/*.iml
+android/.idea/
+android/*.keystore
+android/app/debug.keystore
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+*.jsbundle
+**/Pods/
+/vendor/bundle/
+.metro-health-check*
