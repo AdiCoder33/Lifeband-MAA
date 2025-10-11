@@ -3,11 +3,12 @@ import {StatusBar, StyleSheet} from 'react-native';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import AppProviders from './src/providers/AppProviders';
+import {palette} from './src/theme';
 
 const App: React.FC = () => {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#E8F0FE" />
+      <StatusBar barStyle="light-content" backgroundColor={palette.background} />
       <AppProviders>
         <AppNavigator />
       </AppProviders>
@@ -18,7 +19,7 @@ const App: React.FC = () => {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#E8F0FE',
+    backgroundColor: palette.background,
   },
 });
 

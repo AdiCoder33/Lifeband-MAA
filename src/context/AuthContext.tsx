@@ -13,21 +13,34 @@ type AuthState = {
   role?: UserRole;
   name?: string;
   identifier?: string;
+  email?: string;
 };
 
 type AuthAction =
-  | {type: 'LOGIN'; payload: {name: string; identifier: string}}
+  | {
+      type: 'LOGIN';
+      payload: {name: string; identifier: string; email?: string};
+    }
   | {type: 'SET_ROLE'; payload: UserRole}
   | {type: 'LOGOUT'};
 
-type LoginPayload = {name: string; identifier: string};
+type LoginPayload = {name: string; identifier: string; email?: string};
+type RegisterPayload = {
+  name: string;
+  email: string;
+  identifier?: string;
+  password?: string;
+};
 
 type AuthContextValue = {
   isAuthenticated: boolean;
   role?: UserRole;
   name?: string;
   identifier?: string;
+  email?: string;
   login: (payload: LoginPayload) => void;
+  register: (payload: RegisterPayload) => void;
+  loginWithGoogle: () => void;
   selectRole: (role: UserRole) => void;
   logout: () => void;
 };
@@ -44,6 +57,7 @@ const reducer = (state: AuthState, action: AuthAction): AuthState => {
         isAuthenticated: true,
         name: action.payload.name,
         identifier: action.payload.identifier,
+        email: action.payload.email,
       };
     case 'SET_ROLE':
       return {
@@ -62,8 +76,36 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  const login = useCallback(({name, identifier}: LoginPayload) => {
-    dispatch({type: 'LOGIN', payload: {name, identifier}});
+  const login = useCallback(
+    ({name, identifier, email}: LoginPayload) => {
+      dispatch({type: 'LOGIN', payload: {name, identifier, email}});
+    },
+    [],
+  );
+
+  const register = useCallback(
+    ({name, email, identifier}: RegisterPayload) => {
+      dispatch({
+        type: 'LOGIN',
+        payload: {
+          name,
+          email,
+          identifier: identifier ?? email,
+        },
+      });
+    },
+    [],
+  );
+
+  const loginWithGoogle = useCallback(() => {
+    dispatch({
+      type: 'LOGIN',
+      payload: {
+        name: 'LifeBand User',
+        email: 'lifeband.user@example.com',
+        identifier: 'GOOGLE_USER',
+      },
+    });
   }, []);
 
   const selectRole = useCallback((role: UserRole) => {
@@ -81,10 +123,23 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
       name: state.name,
       identifier: state.identifier,
       login,
+      register,
+      loginWithGoogle,
       selectRole,
       logout,
     }),
-    [login, logout, selectRole, state.identifier, state.isAuthenticated, state.name, state.role],
+    [
+      login,
+      loginWithGoogle,
+      logout,
+      register,
+      selectRole,
+      state.email,
+      state.identifier,
+      state.isAuthenticated,
+      state.name,
+      state.role,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

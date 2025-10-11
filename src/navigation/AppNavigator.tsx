@@ -1,17 +1,20 @@
-import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
+import React, {useMemo} from 'react';
+import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useAuth, type UserRole} from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
+import RegisterScreen from '../screens/RegisterScreen';
 import RoleSelectionScreen from '../screens/RoleSelectionScreen';
 import ScanConnectScreen from '../screens/asha/ScanConnectScreen';
 import LiveStreamScreen from '../screens/asha/LiveStreamScreen';
 import DoctorNavigator from './DoctorNavigator';
 import PatientHomeScreen from '../screens/PatientHomeScreen';
+import {palette} from '../theme';
 
 export type RootStackParamList = {
   Login: undefined;
+  Register: undefined;
   RoleSelection: undefined;
   Main: undefined;
 };
@@ -23,9 +26,19 @@ const Tab = createBottomTabNavigator();
 const AshaTabs = () => (
   <Tab.Navigator
     screenOptions={{
+      headerShown: false,
       headerShadowVisible: false,
-      tabBarActiveTintColor: '#1A73E8',
-      tabBarInactiveTintColor: '#5F6368',
+      tabBarActiveTintColor: palette.primary,
+      tabBarInactiveTintColor: palette.textSecondary,
+      tabBarStyle: {
+        backgroundColor: palette.surface,
+        borderTopColor: 'transparent',
+        height: 70,
+        paddingBottom: 10,
+      },
+      tabBarLabelStyle: {
+        fontWeight: '600',
+      },
     }}>
     <Tab.Screen
       name="ScanConnect"
@@ -63,15 +76,38 @@ const MainSwitch: React.FC = () => {
 
 export const AppNavigator: React.FC = () => {
   const {isAuthenticated, role} = useAuth();
+  const navigationTheme = useMemo(
+    () => ({
+      ...DefaultTheme,
+      colors: {
+        ...DefaultTheme.colors,
+        primary: palette.primary,
+        background: palette.background,
+        card: palette.surface,
+        text: palette.textPrimary,
+        border: palette.border,
+        notification: palette.primaryLight,
+      },
+    }),
+    [],
+  );
 
   return (
-    <NavigationContainer>
+    <NavigationContainer theme={navigationTheme}>
       <RootStack.Navigator
         screenOptions={{
           headerShown: false,
+          contentStyle: {backgroundColor: palette.background},
         }}>
         {!isAuthenticated ? (
-          <RootStack.Screen name="Login" component={LoginScreen} />
+          <>
+            <RootStack.Screen name="Login" component={LoginScreen} />
+            <RootStack.Screen
+              name="Register"
+              component={RegisterScreen}
+              options={{presentation: 'card'}}
+            />
+          </>
         ) : !role ? (
           <RootStack.Screen
             name="RoleSelection"

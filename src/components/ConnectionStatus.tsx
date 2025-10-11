@@ -1,6 +1,7 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import type {BleConnectionStatus} from '../features/ble/types';
+import {palette, radii, spacing} from '../theme';
 
 type ConnectionStatusProps = {
   status: BleConnectionStatus;
@@ -9,14 +10,25 @@ type ConnectionStatusProps = {
 };
 
 const statusColors: Record<BleConnectionStatus, string> = {
-  idle: '#5F6368',
-  starting: '#1A73E8',
-  scanning: '#1A73E8',
-  connecting: '#1A73E8',
-  connected: '#0F9D58',
-  disconnecting: '#D93025',
-  disconnected: '#F9AB00',
-  error: '#D93025',
+  idle: palette.textSecondary,
+  starting: palette.primary,
+  scanning: palette.primary,
+  connecting: palette.primary,
+  connected: palette.success,
+  disconnecting: palette.danger,
+  disconnected: palette.accent,
+  error: palette.danger,
+};
+
+const statusCopy: Record<BleConnectionStatus, string> = {
+  idle: 'Ready to connect',
+  starting: 'Preparing Bluetooth',
+  scanning: 'Scanning for LifeBand',
+  connecting: 'Connecting to device',
+  connected: 'Device connected',
+  disconnecting: 'Disconnecting',
+  disconnected: 'Device disconnected',
+  error: 'Connection error',
 };
 
 export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
@@ -26,10 +38,17 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
 }) => {
   return (
     <View style={styles.container}>
-      <Text style={[styles.status, {color: statusColors[status]}]}>
-        {status.toUpperCase()}
-      </Text>
-      {deviceName ? <Text style={styles.device}>{deviceName}</Text> : null}
+      <View style={[styles.pill, {backgroundColor: `${statusColors[status]}22`}]}>
+        <View style={[styles.pillDot, {backgroundColor: statusColors[status]}]} />
+        <Text style={[styles.pillText, {color: statusColors[status]}]}>
+          {statusCopy[status]}
+        </Text>
+      </View>
+      {deviceName ? (
+        <Text style={styles.device}>Linked device: {deviceName}</Text>
+      ) : (
+        <Text style={styles.device}>No device linked</Text>
+      )}
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
   );
@@ -37,25 +56,41 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: '#F1F3F4',
-    marginVertical: 12,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: '#102C56',
+    borderWidth: 1,
+    borderColor: '#1D3F70',
   },
-  status: {
-    fontSize: 16,
+  pill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+  },
+  pillDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: spacing.xs,
+  },
+  pillText: {
+    fontSize: 12,
     fontWeight: '700',
   },
   device: {
-    marginTop: 4,
+    marginTop: spacing.sm,
     fontSize: 14,
+    color: palette.textOnDark,
     fontWeight: '600',
-    color: '#202124',
   },
   message: {
-    marginTop: 4,
+    marginTop: spacing.xs,
     fontSize: 13,
-    color: '#5F6368',
+    color: palette.primaryLight,
+    opacity: 0.9,
   },
 });
 

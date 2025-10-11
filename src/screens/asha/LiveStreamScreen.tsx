@@ -12,10 +12,13 @@ import {
   VictoryLine,
   VictoryTheme,
 } from 'victory-native';
+import ScreenBackground from '../../components/ScreenBackground';
+import AppHeader from '../../components/AppHeader';
 import {useBle} from '../../features/ble/BleProvider';
 import ReadingTile from '../../components/ReadingTile';
 import {useAppStore} from '../../store/useAppStore';
 import {usePatientReadings} from '../../hooks/usePatientReadings';
+import {palette, radii, spacing} from '../../theme';
 
 const ranges = [
   {key: '1h', label: '1H', days: 1 / 24},
@@ -31,7 +34,7 @@ const formatTimestamp = (value?: string) => {
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return date.toLocaleTimeString();
+  return date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 };
 
 export const LiveStreamScreen: React.FC = () => {
@@ -56,129 +59,195 @@ export const LiveStreamScreen: React.FC = () => {
     : volatileReadings;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Live Stream</Text>
-        <TouchableOpacity onPress={clearReadings}>
-          <Text style={styles.clear}>Clear history</Text>
-        </TouchableOpacity>
-      </View>
-      <Text style={styles.timestamp}>
-        Last update: {formatTimestamp(lastReading?.timestamp)}
-      </Text>
-
-      <View style={styles.tilesRow}>
-        <ReadingTile
-          label="Heart Rate"
-          value={lastReading?.heartRate}
-          unit="bpm"
+    <ScreenBackground>
+      <View style={styles.content}>
+        <AppHeader
+          title="Live streaming vitals"
+          subtitle="See every heartbeat, saturation, and pressure update in real time."
+          rightAccessory={
+            <TouchableOpacity
+              onPress={clearReadings}
+              style={styles.clearButton}
+              accessibilityRole="button">
+              <Text style={styles.clearButtonLabel}>Clear history</Text>
+            </TouchableOpacity>
+          }
         />
-        <ReadingTile label="SpO2" value={lastReading?.spo2} unit="%" />
-      </View>
-      <View style={styles.tilesRow}>
-        <ReadingTile label="HRV" value={lastReading?.hrv} unit="ms" />
-        <ReadingTile
-          label="Temperature"
-          value={lastReading?.temperature}
-          unit="Ãƒâ€šÃ‚Â°C"
+
+        <Text style={styles.timestamp}>
+          Last update · {formatTimestamp(lastReading?.timestamp)}
+        </Text>
+
+        <View style={styles.tilesRow}>
+          <ReadingTile
+            label="Heart Rate"
+            value={lastReading?.heartRate}
+            unit="bpm"
+            trend="steady"
+          />
+          <ReadingTile
+            label="SpO2"
+            value={lastReading?.spo2}
+            unit="%"
+            trend="steady"
+          />
+        </View>
+        <View style={styles.tilesRow}>
+          <ReadingTile
+            label="HRV"
+            value={lastReading?.hrv}
+            unit="ms"
+            trend="steady"
+            variant="secondary"
+          />
+          <ReadingTile
+            label="Temperature"
+            value={lastReading?.temperature}
+            unit="°C"
+            trend="steady"
+            variant="secondary"
+          />
+        </View>
+        <View style={styles.tilesRow}>
+          <ReadingTile
+            label="Systolic"
+            value={lastReading?.systolic}
+            unit="mmHg"
+            trend="steady"
+            variant="secondary"
+          />
+          <ReadingTile
+            label="Diastolic"
+            value={lastReading?.diastolic}
+            unit="mmHg"
+            trend="steady"
+            variant="secondary"
+          />
+        </View>
+
+        <View style={styles.rangeRow}>
+          {ranges.map(item => {
+            const active = range.key === item.key;
+            return (
+              <TouchableOpacity
+                key={item.key}
+                style={[styles.rangeButton, active && styles.rangeButtonActive]}
+                onPress={() => setRange(item)}
+                accessibilityRole="button">
+                <Text
+                  style={[
+                    styles.rangeButtonText,
+                    active && styles.rangeButtonTextActive,
+                  ]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <View style={styles.chartCard}>
+          <Text style={styles.chartTitle}>Heart rate stream</Text>
+          <VictoryChart
+            theme={VictoryTheme.material}
+            height={220}
+            padding={{top: 16, left: 48, right: 16, bottom: 32}}
+            scale={{x: 'time'}}>
+            <VictoryAxis
+              tickFormat={(value: Date | string | number) =>
+                new Date(value).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })
+              }
+              style={{
+                axis: {stroke: palette.border},
+                tickLabels: {fontSize: 11, fill: palette.textSecondary},
+              }}
+            />
+            <VictoryAxis
+              dependentAxis
+              tickFormat={(value: number) => `${value}`}
+              style={{
+                axis: {stroke: palette.border},
+                tickLabels: {fontSize: 11, fill: palette.textSecondary},
+              }}
+            />
+            <VictoryLine
+              data={chartData}
+              interpolation="monotoneX"
+              style={{data: {stroke: '#4C8BF5', strokeWidth: 3}}}
+            />
+          </VictoryChart>
+        </View>
+
+        <View style={styles.historyHeader}>
+          <Text style={styles.historyTitle}>Recent samples</Text>
+          <Text style={styles.historyMeta}>
+            {history.length ? `${history.length} readings in memory` : 'Waiting for readings'}
+          </Text>
+        </View>
+
+        <View style={styles.tableHeader}>
+          <Text style={[styles.tableLabel, styles.tableTimestamp]}>Time</Text>
+          <Text style={styles.tableLabel}>HR</Text>
+          <Text style={styles.tableLabel}>SpO2</Text>
+          <Text style={styles.tableLabel}>BP</Text>
+          <Text style={styles.tableLabel}>Temp</Text>
+        </View>
+
+        <FlatList
+          data={history}
+          keyExtractor={item => item.timestamp}
+          contentContainerStyle={styles.listContent}
+          renderItem={({item}) => (
+            <View style={styles.row}>
+              <Text style={[styles.rowValue, styles.rowTimestamp]}>
+                {formatTimestamp(item.timestamp)}
+              </Text>
+              <Text style={styles.rowValue}>{item.heartRate ?? '--'} bpm</Text>
+              <Text style={styles.rowValue}>{item.spo2 ?? '--'}%</Text>
+              <Text style={styles.rowValue}>
+                {item.systolic && item.diastolic
+                  ? `${item.systolic}/${item.diastolic}`
+                  : '--'}
+              </Text>
+              <Text style={styles.rowValue}>
+                {item.temperature != null ? `${item.temperature}°C` : '--'}
+              </Text>
+            </View>
+          )}
+          ListEmptyComponent={
+            <Text style={styles.empty}>
+              Waiting for LifeBand readings to stream in…
+            </Text>
+          }
         />
       </View>
-      <View style={styles.tilesRow}>
-        <ReadingTile label="Systolic" value={lastReading?.systolic} unit="mmHg" />
-        <ReadingTile label="Diastolic" value={lastReading?.diastolic} unit="mmHg" />
-      </View>
-
-      <View style={styles.rangeRow}>
-        {ranges.map(item => (
-          <TouchableOpacity
-            key={item.key}
-            style={[
-              styles.rangeButton,
-              range.key === item.key && styles.rangeButtonActive,
-            ]}
-            onPress={() => setRange(item)}>
-            <Text
-              style={[
-                styles.rangeButtonText,
-                range.key === item.key && styles.rangeButtonTextActive,
-              ]}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      <View style={styles.chartContainer}>
-        <VictoryChart
-          theme={VictoryTheme.material}
-          height={220}
-          padding={{top: 16, left: 48, right: 16, bottom: 32}}
-          scale={{x: 'time'}}>
-          <VictoryAxis
-            tickFormat={(value: Date | string | number) =>
-              new Date(value).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })
-            }
-          />
-          <VictoryAxis dependentAxis tickFormat={(value: Date | string | number) => `${value}`} />
-          <VictoryLine
-            data={chartData}
-            style={{data: {stroke: '#1A73E8', strokeWidth: 3}}}
-          />
-        </VictoryChart>
-      </View>
-
-      <Text style={styles.historyLabel}>Recent samples</Text>
-      <FlatList
-        data={history}
-        keyExtractor={item => item.timestamp}
-        contentContainerStyle={styles.listContent}
-        renderItem={({item}) => (
-          <View style={styles.row}>
-            <Text style={styles.rowTimestamp}>{formatTimestamp(item.timestamp)}</Text>
-            <Text style={styles.rowValue}>{item.heartRate} bpm</Text>
-            <Text style={styles.rowValue}>{item.spo2}%</Text>
-            <Text style={styles.rowValue}>
-              {item.systolic}/{item.diastolic} mmHg
-            </Text>
-            <Text style={styles.rowValue}>{item.temperature}Ãƒâ€šÃ‚Â°C</Text>
-          </View>
-        )}
-        ListEmptyComponent={
-          <Text style={styles.empty}>Waiting for readingsÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦</Text>
-        }
-      />
-    </View>
+    </ScreenBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    padding: spacing.lg,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  clearButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.surface,
   },
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#202124',
-  },
-  clear: {
-    color: '#D93025',
+  clearButtonLabel: {
+    color: palette.textOnDark,
     fontWeight: '600',
   },
   timestamp: {
-    marginTop: 4,
-    fontSize: 14,
-    color: '#5F6368',
+    marginTop: spacing.sm,
+    color: '#9CB3DC',
+    fontSize: 13,
   },
   tilesRow: {
     flexDirection: 'row',
@@ -187,65 +256,99 @@ const styles = StyleSheet.create({
   rangeRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginVertical: 12,
+    marginVertical: spacing.lg,
   },
   rangeButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginHorizontal: 6,
+    borderColor: palette.surface,
+    marginHorizontal: spacing.xs,
+    backgroundColor: '#102F5A',
   },
   rangeButtonActive: {
-    backgroundColor: '#1A73E8',
-    borderColor: '#1A73E8',
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
   },
   rangeButtonText: {
-    color: '#1A73E8',
+    color: palette.textOnDark,
     fontWeight: '600',
   },
   rangeButtonTextActive: {
-    color: '#FFFFFF',
+    color: palette.textOnPrimary,
   },
-  chartContainer: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    backgroundColor: '#FAFBFF',
-    marginBottom: 16,
+  chartCard: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 6,
   },
-  historyLabel: {
-    marginTop: 8,
-    marginBottom: 8,
+  chartTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#202124',
+    color: palette.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  historyHeader: {
+    marginTop: spacing.xl,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'baseline',
+  },
+  historyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  historyMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  tableHeader: {
+    flexDirection: 'row',
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.sm,
+  },
+  tableLabel: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: palette.textSecondary,
+    textAlign: 'right',
+  },
+  tableTimestamp: {
+    textAlign: 'left',
   },
   listContent: {
-    paddingBottom: 120,
+    paddingBottom: spacing.xl,
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
-  },
-  rowTimestamp: {
-    flex: 2,
-    fontWeight: '600',
-    color: '#202124',
+    borderBottomColor: palette.border,
   },
   rowValue: {
     flex: 1,
     textAlign: 'right',
-    color: '#5F6368',
+    color: palette.textSecondary,
+    fontSize: 13,
+  },
+  rowTimestamp: {
+    textAlign: 'left',
+    fontWeight: '600',
+    color: palette.textPrimary,
   },
   empty: {
-    paddingTop: 24,
+    marginTop: spacing.lg,
     textAlign: 'center',
-    color: '#80868B',
+    color: palette.textSecondary,
   },
 });
 

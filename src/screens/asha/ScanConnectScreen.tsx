@@ -2,14 +2,16 @@ import React, {useEffect, useMemo, useState} from 'react';
 import {
   Alert,
   FlatList,
+  Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
-  Platform,
 } from 'react-native';
 import {DEVICE_NAME_PREFIX as ENV_DEVICE_PREFIX} from '@env';
+import ScreenBackground from '../../components/ScreenBackground';
+import AppHeader from '../../components/AppHeader';
 import {useBle} from '../../features/ble/BleProvider';
 import type {BleDevice} from '../../features/ble/types';
 import {ConnectionStatus} from '../../components/ConnectionStatus';
@@ -17,6 +19,7 @@ import {requestBlePermissions} from '../../hooks/useBlePermissions';
 import {useAppStore} from '../../store/useAppStore';
 import {useUnsyncedReadingsCount} from '../../hooks/useUnsyncedReadingsCount';
 import {useSync} from '../../hooks/useSync';
+import {palette, radii, spacing} from '../../theme';
 
 const DEFAULT_PREFIX = ENV_DEVICE_PREFIX || 'LIFEBAND';
 
@@ -81,6 +84,7 @@ export const ScanConnectScreen: React.FC = () => {
 
   const handleSavePatient = async () => {
     await setPatientId(patientValue.trim());
+    setSelectedPatient(patientValue.trim() || undefined);
   };
 
   const handleSaveEndpoint = async () => {
@@ -92,7 +96,8 @@ export const ScanConnectScreen: React.FC = () => {
     return (
       <TouchableOpacity
         style={[styles.deviceCard, connected && styles.deviceCardActive]}
-        onPress={() => handleStart(item)}>
+        onPress={() => handleStart(item)}
+        accessibilityRole="button">
         <View style={styles.deviceHeader}>
           <Text style={styles.deviceName}>{item.name || 'Unknown device'}</Text>
           {typeof item.rssi === 'number' ? (
@@ -106,248 +111,300 @@ export const ScanConnectScreen: React.FC = () => {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.heading}>Scan and Connect</Text>
-      <Text style={styles.description}>
-        Start scanning to automatically connect to the first LifeBand in range or tap a device below.
-      </Text>
+    <ScreenBackground>
+      <View style={styles.content}>
+        <AppHeader
+          title="Scan & connect LifeBand devices"
+          subtitle="Discover nearby wearables, link them to patients, and keep data flowing."
+          rightAccessory={
+            <TouchableOpacity
+              onPress={isScanning ? stop : () => handleStart()}
+              style={styles.scanButton}
+              accessibilityRole="button">
+              <Text style={styles.scanButtonLabel}>
+                {isScanning ? 'Stop scan' : 'Start scan'}
+              </Text>
+            </TouchableOpacity>
+          }
+        />
 
-      <ConnectionStatus
-        status={status}
-        message={statusMessage}
-        deviceName={connectedDevice?.name}
-      />
-
-      <View style={styles.syncCard}>
-        <View style={styles.syncStatusRow}>
-          <Text style={styles.syncTitle}>Sync status</Text>
-          <Text
-            style={[
-              styles.syncStatus,
-              syncStatus === 'error'
-                ? styles.syncStatusError
-                : syncStatus === 'syncing'
-                ? styles.syncStatusSyncing
-                : styles.syncStatusIdle,
-            ]}>
-            {syncStatus.toUpperCase()}
-          </Text>
+        <View style={styles.statusCard}>
+          <ConnectionStatus
+            status={status}
+            message={statusMessage}
+            deviceName={connectedDevice?.name}
+          />
+          <View style={styles.syncRow}>
+            <View>
+              <Text style={styles.syncLabel}>Sync status</Text>
+              <Text style={styles.syncValue}>{syncStatus.toUpperCase()}</Text>
+              <Text style={styles.syncMeta}>
+                {lastSyncAt
+                  ? `Last sync ${new Date(lastSyncAt).toLocaleString()}`
+                  : 'No sync yet'}
+              </Text>
+            </View>
+            <View>
+              <Text style={styles.syncLabel}>Unsynced readings</Text>
+              <Text style={styles.syncValue}>{unsyncedCount}</Text>
+              {offline ? (
+                <Text style={styles.syncMeta}>Offline mode - sync paused</Text>
+              ) : null}
+            </View>
+          </View>
+          {error ? <Text style={styles.syncError}>{error}</Text> : null}
+          <TouchableOpacity
+            onPress={syncNow}
+            style={styles.syncAction}
+            accessibilityRole="button">
+            <Text style={styles.syncActionLabel}>Sync now</Text>
+          </TouchableOpacity>
         </View>
-        <Text style={styles.syncMeta}>
-          Pending uploads: {unsyncedCount}{' '}
-          {offline ? '(offline)' : ''}
-        </Text>
-        {lastSyncAt ? (
-          <Text style={styles.syncMeta}>
-            Last sync: {new Date(lastSyncAt).toLocaleString()}
-          </Text>
-        ) : null}
-        {error ? <Text style={styles.syncError}>{error}</Text> : null}
-        <TouchableOpacity
-          style={styles.syncButton}
-          onPress={syncNow}
-          disabled={syncStatus === 'syncing'}>
-          <Text style={styles.syncButtonText}>
-            {syncStatus === 'syncing' ? 'Syncing...' : 'Sync Now'}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      <View style={styles.fieldRow}>
-        <View style={styles.field}>
-          <Text style={styles.label}>Target name prefix</Text>
-          <TextInput
-            value={prefix}
-            onChangeText={setPrefix}
-            placeholder={DEFAULT_PREFIX}
-            style={styles.input}
-            autoCapitalize="characters"
+        <View style={styles.formCard}>
+          <Text style={styles.sectionTitle}>Device matching</Text>
+          <View style={styles.fieldRow}>
+            <View style={styles.field}>
+              <Text style={styles.label}>Device name prefix</Text>
+              <TextInput
+                value={prefix}
+                onChangeText={setPrefix}
+                placeholder={DEFAULT_PREFIX}
+                placeholderTextColor="#6B7A90"
+                autoCapitalize="characters"
+                style={styles.input}
+              />
+            </View>
+            <TouchableOpacity
+              onPress={() => setPrefix(DEFAULT_PREFIX)}
+              style={styles.outlineButton}>
+              <Text style={styles.outlineButtonLabel}>Reset</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.sectionTitle, styles.sectionSpacing]}>
+            Patient linkage
+          </Text>
+          <View style={styles.fieldRow}>
+            <View style={styles.field}>
+              <Text style={styles.label}>Patient ID</Text>
+              <TextInput
+                value={patientValue}
+                onChangeText={setPatientValue}
+                placeholder="e.g. PAT-103"
+                placeholderTextColor="#6B7A90"
+                autoCapitalize="characters"
+                style={styles.input}
+              />
+            </View>
+            <TouchableOpacity
+              onPress={handleSavePatient}
+              style={styles.primaryButton}>
+              <Text style={styles.primaryButtonLabel}>Save ID</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.fieldRow}>
+            <View style={styles.field}>
+              <Text style={styles.label}>Upload endpoint</Text>
+              <TextInput
+                value={endpointValue}
+                onChangeText={setEndpointValue}
+                placeholder="https://api.lifeband.care/sync"
+                placeholderTextColor="#6B7A90"
+                autoCapitalize="none"
+                style={styles.input}
+              />
+            </View>
+            <TouchableOpacity
+              onPress={handleSaveEndpoint}
+              style={styles.primaryButton}>
+              <Text style={styles.primaryButtonLabel}>Save URL</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View style={styles.devicesCard}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Nearby devices</Text>
+            <Text style={styles.sectionMeta}>
+              Tap a device to connect instantly. List refreshes while scanning.
+            </Text>
+          </View>
+          <FlatList
+            data={devices}
+            keyExtractor={item => item.id}
+            renderItem={renderDevice}
+            ListEmptyComponent={
+              <Text style={styles.empty}>
+                {isScanning
+                  ? 'Scanning... bring the LifeBand closer.'
+                  : 'No devices discovered yet. Start scanning to refresh.'}
+              </Text>
+            }
           />
         </View>
-        <TouchableOpacity
-          style={[styles.actionButton, isScanning && styles.buttonDisabled]}
-          onPress={() => handleStart()}
-          disabled={isScanning}>
-          <Text style={styles.actionButtonText}>{isScanning ? 'Scanning...' : 'Start Scan'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.actionButton, styles.stopButton]} onPress={stop}>
-          <Text style={styles.actionButtonText}>Stop</Text>
-        </TouchableOpacity>
       </View>
-
-      <View style={styles.fieldRow}>
-        <View style={[styles.field, styles.flexGrow]}>
-          <Text style={styles.label}>Patient ID</Text>
-          <TextInput
-            value={patientValue}
-            onChangeText={setPatientValue}
-            placeholder="Patient identifier"
-            style={styles.input}
-            autoCapitalize="characters"
-            onBlur={handleSavePatient}
-          />
-        </View>
-        <View style={[styles.field, styles.flexGrow]}>
-          <Text style={styles.label}>Upload endpoint</Text>
-          <TextInput
-            value={endpointValue}
-            onChangeText={setEndpointValue}
-            placeholder="https://api.example.com/vitals"
-            style={styles.input}
-            autoCapitalize="none"
-            keyboardType="url"
-            onBlur={handleSaveEndpoint}
-          />
-        </View>
-      </View>
-
-      <Text style={styles.listTitle}>Nearby devices</Text>
-      <FlatList
-        data={devices}
-        keyExtractor={item => item.id}
-        renderItem={renderDevice}
-        ListEmptyComponent={
-          <Text style={styles.empty}>
-            No devices discovered yet. Start a scan to look for wearables.
-          </Text>
-        }
-        contentContainerStyle={styles.listContent}
-      />
-    </View>
+    </ScreenBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  content: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    backgroundColor: '#FFFFFF',
+    padding: spacing.lg,
   },
-  heading: {
-    fontSize: 22,
+  scanButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.surface,
+  },
+  scanButtonLabel: {
+    color: palette.textOnDark,
+    fontWeight: '600',
+  },
+  statusCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: '#0F2B50',
+    borderWidth: 1,
+    borderColor: '#1F3F70',
+  },
+  syncRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.lg,
+  },
+  syncLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9CB3DC',
+    textTransform: 'uppercase',
+  },
+  syncValue: {
+    marginTop: spacing.xs,
+    color: palette.textOnDark,
     fontWeight: '700',
-    color: '#202124',
+    fontSize: 18,
   },
-  description: {
-    marginTop: 6,
-    fontSize: 14,
-    color: '#5F6368',
+  syncMeta: {
+    marginTop: 2,
+    color: '#9CB3DC',
+    fontSize: 12,
+  },
+  syncError: {
+    marginTop: spacing.sm,
+    color: '#FBC8C2',
+    fontSize: 12,
+  },
+  syncAction: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
+  },
+  syncActionLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+  },
+  formCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 20,
+    elevation: 6,
+  },
+  sectionHeader: {
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  sectionMeta: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  sectionSpacing: {
+    marginTop: spacing.lg,
   },
   fieldRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginTop: 18,
+    alignItems: 'center',
+    marginTop: spacing.sm,
   },
   field: {
-    marginRight: 12,
-  },
-  flexGrow: {
     flex: 1,
+    marginRight: spacing.sm,
   },
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    color: '#5F6368',
-    marginBottom: 4,
+    color: palette.textSecondary,
+    marginBottom: spacing.xs,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#DADCE0',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: palette.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     fontSize: 15,
-    minWidth: 160,
-    backgroundColor: '#FAFBFF',
+    color: palette.textPrimary,
+    backgroundColor: palette.surfaceSoft,
   },
-  actionButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#1A73E8',
-  },
-  stopButton: {
-    backgroundColor: '#D93025',
-  },
-  buttonDisabled: {
-    backgroundColor: '#96B7F2',
-  },
-  actionButtonText: {
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  listTitle: {
-    marginTop: 28,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#202124',
-  },
-  listContent: {
-    paddingBottom: 120,
-  },
-  syncCard: {
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
+  outlineButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#F6F9FE',
+    borderColor: palette.primary,
   },
-  syncStatusRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  syncTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#202124',
-  },
-  syncStatus: {
+  outlineButtonLabel: {
+    color: palette.primary,
     fontWeight: '700',
   },
-  syncStatusIdle: {
-    color: '#0F9D58',
+  primaryButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
   },
-  syncStatusSyncing: {
-    color: '#F9AB00',
-  },
-  syncStatusError: {
-    color: '#D93025',
-  },
-  syncMeta: {
-    fontSize: 12,
-    color: '#5F6368',
-    marginTop: 2,
-  },
-  syncError: {
-    marginTop: 6,
-    fontSize: 12,
-    color: '#D93025',
-  },
-  syncButton: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
-    backgroundColor: '#1A73E8',
-  },
-  syncButtonText: {
-    color: '#FFFFFF',
+  primaryButtonLabel: {
+    color: palette.textOnPrimary,
     fontWeight: '700',
+  },
+  devicesCard: {
+    marginTop: spacing.lg,
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 6,
+    flex: 1,
   },
   deviceCard: {
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceSoft,
   },
   deviceCardActive: {
-    borderColor: '#1A73E8',
+    borderColor: palette.primary,
     backgroundColor: '#E8F0FE',
   },
   deviceHeader: {
@@ -356,29 +413,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   deviceName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#202124',
+    color: palette.textPrimary,
   },
   deviceRssi: {
     fontSize: 12,
-    color: '#5F6368',
+    color: palette.textSecondary,
   },
   deviceId: {
-    marginTop: 6,
+    marginTop: spacing.xs,
     fontSize: 12,
-    color: '#5F6368',
+    color: palette.textSecondary,
   },
   connectedBadge: {
-    marginTop: 8,
+    marginTop: spacing.sm,
     fontSize: 12,
     fontWeight: '600',
-    color: '#0F9D58',
+    color: palette.success,
   },
   empty: {
-    marginTop: 24,
+    marginTop: spacing.lg,
     textAlign: 'center',
-    color: '#80868B',
+    color: palette.textSecondary,
   },
 });
 

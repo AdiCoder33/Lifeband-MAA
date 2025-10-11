@@ -1,14 +1,14 @@
 import React, {useMemo} from 'react';
 import {
   FlatList,
-  RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
+import ScreenBackground from '../../components/ScreenBackground';
+import AppHeader from '../../components/AppHeader';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore as useReadingStoreHook} from '../../store/useReadingStore';
 import {useLiveRiskFeed} from '../../services/live/useLiveRiskFeed';
@@ -16,6 +16,7 @@ import {usePatientsQuery} from '../../features/patients/queries';
 import {useSyncPatientsList} from '../../features/patients/usePatientsSync';
 import {RiskFeedItem, RiskLevel} from '../../types/models';
 import {DoctorStackScreenProps} from '../../navigation/DoctorNavigator';
+import {palette, radii, spacing} from '../../theme';
 
 const riskPriority: Record<RiskLevel, number> = {
   HIGH: 0,
@@ -23,28 +24,42 @@ const riskPriority: Record<RiskLevel, number> = {
   LOW: 2,
 };
 
-const RiskFeedList: React.FC<{data: RiskFeedItem[]}> = ({data}) => {
+const riskCopy: Record<RiskLevel, string> = {
+  HIGH: 'Critical attention needed',
+  MODERATE: 'Monitor closely',
+  LOW: 'Stable',
+};
+
+const RiskFeedCard: React.FC<{data: RiskFeedItem[]}> = ({data}) => {
   if (!data.length) {
     return (
-      <Text style={styles.emptyHint}>
-        Live risk alerts will appear here when patients are flagged.
-      </Text>
+      <View style={styles.riskEmpty}>
+        <Text style={styles.riskEmptyTitle}>No active escalations</Text>
+        <Text style={styles.riskEmptyCopy}>
+          Live alerts raised by ASHA workers and wearables will appear here instantly.
+        </Text>
+      </View>
     );
   }
+
   return (
-    <View style={styles.card}>
-      {data.map(item => (
-        <View key={`${item.patientId}-${item.receivedAt}`} style={styles.feedRow}>
-          <View style={[styles.riskPill, pillStyle(item.risk)]}>
-            <Text style={styles.riskPillText}>{item.risk}</Text>
+    <View style={styles.riskList}>
+      {data.slice(0, 6).map(item => (
+        <View key={`${item.patientId}-${item.receivedAt}`} style={styles.riskRow}>
+          <View style={[styles.riskBadge, riskBadgeStyles[item.risk]]}>
+            <Text style={styles.riskBadgeLabel}>{item.risk}</Text>
           </View>
-          <View style={styles.feedBody}>
-            <Text style={styles.feedTitle}>{item.patientName}</Text>
+          <View style={styles.riskBody}>
+            <Text style={styles.riskTitle}>{item.patientName}</Text>
             {item.message ? (
-              <Text style={styles.feedMessage}>{item.message}</Text>
+              <Text style={styles.riskMessage}>{item.message}</Text>
             ) : null}
-            <Text style={styles.feedTimestamp}>
-              {new Date(item.receivedAt).toLocaleTimeString()}
+            <Text style={styles.riskMeta}>
+              {new Date(item.receivedAt).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}{' '}
+              · {riskCopy[item.risk]}
             </Text>
           </View>
         </View>
@@ -53,15 +68,25 @@ const RiskFeedList: React.FC<{data: RiskFeedItem[]}> = ({data}) => {
   );
 };
 
-const pillStyle = (risk: RiskLevel) => {
-  switch (risk) {
-    case 'HIGH':
-      return styles.pillHigh;
-    case 'MODERATE':
-      return styles.pillModerate;
-    default:
-      return styles.pillLow;
-  }
+const riskBadgeStyles: Record<
+  RiskLevel,
+  {backgroundColor: string; borderColor: string; color: string}
+> = {
+  HIGH: {
+    backgroundColor: '#3B0A0A',
+    borderColor: '#EA4335',
+    color: '#EA4335',
+  },
+  MODERATE: {
+    backgroundColor: '#3A2609',
+    borderColor: '#F9AB00',
+    color: '#F9AB00',
+  },
+  LOW: {
+    backgroundColor: '#06351F',
+    borderColor: '#34A853',
+    color: '#34A853',
+  },
 };
 
 type Navigation = DoctorStackScreenProps<'DoctorOverview'>['navigation'];
@@ -81,179 +106,345 @@ export const DoctorOverviewScreen: React.FC = () => {
         ? data.map(item => ({
             id: item.id,
             name: item.name,
-            riskLevel: item.riskLevel ?? 'LOW',
+            riskLevel: (item.riskLevel ?? 'LOW') as RiskLevel,
             village: item.village,
             lastReadingAt: item.lastReadingAt,
           }))
         : Object.values(cachedPatients).map(item => ({
             id: item.id,
             name: item.name,
-            riskLevel: item.riskLevel ?? 'LOW',
+            riskLevel: (item.riskLevel ?? 'LOW') as RiskLevel,
             village: item.village,
             lastReadingAt: item.lastReadingAt,
           }));
     return list.sort(
       (a, b) =>
-        (riskPriority[a.riskLevel as RiskLevel] ??
-          Number.MAX_SAFE_INTEGER) -
-        (riskPriority[b.riskLevel as RiskLevel] ??
-          Number.MAX_SAFE_INTEGER),
+        (riskPriority[a.riskLevel] ?? Number.MAX_SAFE_INTEGER) -
+        (riskPriority[b.riskLevel] ?? Number.MAX_SAFE_INTEGER),
     );
   }, [cachedPatients, data]);
 
+  const highRiskCount = patients.filter(item => item.riskLevel === 'HIGH').length;
+  const moderateRiskCount = patients.filter(
+    item => item.riskLevel === 'MODERATE',
+  ).length;
+
   const handlePatientPress = (id: string) => {
+    setSelectedPatient(id);
     navigation.navigate('PatientDetail', {patientId: id});
   };
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={isFetching} onRefresh={refetch} />
-      }>
-      <Text style={styles.heading}>Live Risk Feed</Text>
-      <RiskFeedList data={riskFeed} />
-      {offline ? (
-        <Text style={styles.offlineBanner}>Offline mode - showing cached data</Text>
-      ) : null}
-
-      <View style={styles.sectionHeader}>
-        <Text style={styles.heading}>Patients</Text>
-        <TouchableOpacity onPress={refetch}>
-          <Text style={styles.link}>Refresh</Text>
-        </TouchableOpacity>
-      </View>
+    <ScreenBackground>
       <FlatList
         data={patients}
         keyExtractor={item => item.id}
+        refreshing={isFetching}
+        onRefresh={refetch}
+        contentContainerStyle={styles.content}
+        ListHeaderComponent={
+          <>
+            <AppHeader
+              title="Care command centre"
+              subtitle="Monitor escalations, prioritise outreach, and drill into patient details."
+              rightAccessory={
+                <TouchableOpacity
+                  onPress={refetch}
+                  style={styles.refreshButton}
+                  accessibilityRole="button">
+                  <Text style={styles.refreshLabel}>Refresh</Text>
+                </TouchableOpacity>
+              }
+            />
+
+            {offline ? (
+              <View style={styles.offlineBanner}>
+                <Text style={styles.offlineTitle}>Offline mode</Text>
+                <Text style={styles.offlineCopy}>
+                  Showing cached patient data until the device reconnects.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.statsRow}>
+              <View style={[styles.statCard, styles.statCardFirst]}>
+                <Text style={styles.statLabel}>Total patients</Text>
+                <Text style={styles.statValue}>{patients.length}</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>High risk</Text>
+                <Text style={[styles.statValue, styles.statHigh]}>
+                  {highRiskCount}
+                </Text>
+              </View>
+              <View style={[styles.statCard, styles.statCardLast]}>
+                <Text style={styles.statLabel}>Moderate risk</Text>
+                <Text style={[styles.statValue, styles.statModerate]}>
+                  {moderateRiskCount}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Live risk feed</Text>
+                <Text style={styles.sectionMeta}>
+                  Latest escalations from wearables and ASHA submissions.
+                </Text>
+              </View>
+              <RiskFeedCard data={riskFeed} />
+            </View>
+
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitle}>Patient roster</Text>
+                <Text style={styles.sectionMeta}>
+                  Tap to open the trending dashboard with demo charts and notes.
+                </Text>
+              </View>
+            </View>
+          </>
+        }
         renderItem={({item}) => (
           <TouchableOpacity
-            style={styles.patientRow}
-            onPress={() => handlePatientPress(item.id)}>
-            <View style={styles.patientInfo}>
-              <Text style={styles.patientName}>{item.name}</Text>
-              {item.village ? (
-                <Text style={styles.patientMeta}>{item.village}</Text>
-              ) : null}
-              {item.lastReadingAt ? (
-                <Text style={styles.patientMeta}>
-                  Last reading: {new Date(item.lastReadingAt).toLocaleString()}
+            onPress={() => handlePatientPress(item.id)}
+            style={styles.patientCard}
+            accessibilityRole="button">
+            <View style={styles.patientBadgeRow}>
+              <View style={styles.patientAvatar}>
+                <Text style={styles.patientAvatarLabel}>
+                  {item.name.charAt(0).toUpperCase()}
                 </Text>
-              ) : null}
+              </View>
+              <View style={styles.patientInfo}>
+                <Text style={styles.patientName}>{item.name}</Text>
+                <Text style={styles.patientMeta}>
+                  {item.village ? `${item.village} · ` : ''}
+                  Last reading{' '}
+                  {item.lastReadingAt
+                    ? new Date(item.lastReadingAt).toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'N/A'}
+                </Text>
+              </View>
+              <View style={[styles.patientRiskPill, riskPillStyles[item.riskLevel]]}>
+                <Text style={[styles.patientRiskLabel, riskTextStyles[item.riskLevel]]}>
+                  {item.riskLevel}
+                </Text>
+              </View>
             </View>
-            <View style={[styles.riskBadge, badgeStyle(item.riskLevel as RiskLevel)]}>
-              <Text style={styles.riskBadgeText}>
-                {(item.riskLevel || 'LOW').toUpperCase()}
-              </Text>
-            </View>
+            <Text style={styles.patientHint}>
+              View demo vitals timeline, quick notes, and care plan templates.
+            </Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
-          <Text style={styles.emptyHint}>
-            No patients found. Pull to refresh once connectivity is available.
-          </Text>
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No patients yet</Text>
+            <Text style={styles.emptyCopy}>
+              Once ASHA workers sync LifeBand data, patients will populate here automatically.
+            </Text>
+          </View>
         }
-        scrollEnabled={false}
       />
-    </ScrollView>
+    </ScreenBackground>
   );
 };
 
-const badgeStyle = (risk: RiskLevel) => {
-  switch (risk) {
-    case 'HIGH':
-      return styles.badgeHigh;
-    case 'MODERATE':
-      return styles.badgeModerate;
-    default:
-      return styles.badgeLow;
-  }
+const riskPillStyles: Record<RiskLevel, {backgroundColor: string}> = {
+  HIGH: {backgroundColor: '#EA433522'},
+  MODERATE: {backgroundColor: '#F9AB0022'},
+  LOW: {backgroundColor: '#34A85322'},
+};
+
+const riskTextStyles: Record<RiskLevel, {color: string}> = {
+  HIGH: {color: '#EA4335'},
+  MODERATE: {color: '#F9AB00'},
+  LOW: {color: '#0F9D58'},
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 16,
-    backgroundColor: '#FFFFFF',
+  content: {
+    padding: spacing.lg,
   },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#202124',
-    marginBottom: 12,
-  },
-  card: {
+  refreshButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: '#FAFBFF',
-    marginBottom: 20,
+    borderColor: palette.surface,
   },
-  emptyHint: {
-    padding: 16,
-    textAlign: 'center',
-    color: '#80868B',
-  },
-  feedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
-  },
-  feedBody: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  feedTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  feedMessage: {
-    fontSize: 13,
-    color: '#5F6368',
-    marginTop: 2,
-  },
-  feedTimestamp: {
-    fontSize: 11,
-    color: '#9AA0A6',
-    marginTop: 2,
-  },
-  riskPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  riskPillText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  pillHigh: {
-    backgroundColor: '#D93025',
-  },
-  pillModerate: {
-    backgroundColor: '#F9AB00',
-  },
-  pillLow: {
-    backgroundColor: '#0F9D58',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  link: {
-    color: '#1A73E8',
+  refreshLabel: {
+    color: palette.textOnDark,
     fontWeight: '600',
   },
-  patientRow: {
+  offlineBanner: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: '#3C2E04',
+    borderWidth: 1,
+    borderColor: '#F9AB00',
+  },
+  offlineTitle: {
+    color: '#F9AB00',
+    fontWeight: '700',
+  },
+  offlineCopy: {
+    marginTop: spacing.xs,
+    color: '#FDE9B8',
+    fontSize: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginTop: spacing.lg,
+    marginBottom: spacing.lg,
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    flex: 1,
+    marginHorizontal: spacing.sm / 2,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: '#102F5A',
+    borderWidth: 1,
+    borderColor: '#1F3F70',
+  },
+  statCardFirst: {
+    marginLeft: 0,
+  },
+  statCardLast: {
+    marginRight: 0,
+  },
+  statLabel: {
+    color: '#9CB3DC',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statValue: {
+    marginTop: spacing.xs,
+    fontSize: 24,
+    fontWeight: '700',
+    color: palette.textOnDark,
+  },
+  statHigh: {
+    color: '#EA4335',
+  },
+  statModerate: {
+    color: '#F9AB00',
+  },
+  sectionCard: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 6,
+    marginBottom: spacing.lg,
+  },
+  sectionHeader: {
+    marginBottom: spacing.sm,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  sectionMeta: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  riskList: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  riskRow: {
+    flexDirection: 'row',
+    padding: spacing.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: palette.border,
+  },
+  riskBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    marginRight: spacing.md,
+  },
+  riskBadgeLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.textOnDark,
+  },
+  riskBody: {
+    flex: 1,
+  },
+  riskTitle: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  riskMessage: {
+    marginTop: spacing.xs,
+    color: palette.textSecondary,
+    fontSize: 13,
+  },
+  riskMeta: {
+    marginTop: spacing.xs,
+    fontSize: 11,
+    color: palette.textSecondary,
+  },
+  riskEmpty: {
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surfaceSoft,
+  },
+  riskEmptyTitle: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  riskEmptyCopy: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  patientCard: {
+    marginBottom: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 5,
+  },
+  patientBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  patientAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#102F5A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: spacing.md,
+  },
+  patientAvatarLabel: {
+    fontWeight: '700',
+    color: palette.textOnDark,
+    fontSize: 18,
   },
   patientInfo: {
     flex: 1,
@@ -261,37 +452,46 @@ const styles = StyleSheet.create({
   patientName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#202124',
+    color: palette.textPrimary,
   },
   patientMeta: {
-    fontSize: 12,
-    color: '#5F6368',
     marginTop: 2,
+    fontSize: 12,
+    color: palette.textSecondary,
   },
-  riskBadge: {
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  patientRiskPill: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  riskBadgeText: {
-    color: '#FFFFFF',
+  patientRiskLabel: {
+    fontSize: 12,
     fontWeight: '700',
   },
-  badgeHigh: {
-    backgroundColor: '#D93025',
+  patientHint: {
+    marginTop: spacing.sm,
+    fontSize: 12,
+    color: palette.textSecondary,
   },
-  badgeModerate: {
-    backgroundColor: '#F9AB00',
+  emptyState: {
+    marginTop: spacing.xl,
+    padding: spacing.xl,
+    borderRadius: radii.lg,
+    backgroundColor: '#0F2B50',
+    borderWidth: 1,
+    borderColor: '#1F3F70',
+    alignItems: 'center',
   },
-  badgeLow: {
-    backgroundColor: '#0F9D58',
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.textOnDark,
   },
-  offlineBanner: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#FFF3CD',
-    color: '#856404',
-    marginBottom: 12,
+  emptyCopy: {
+    marginTop: spacing.sm,
+    fontSize: 13,
+    color: '#9CB3DC',
+    textAlign: 'center',
   },
 });
 
