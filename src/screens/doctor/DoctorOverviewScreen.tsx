@@ -25,9 +25,9 @@ const riskPriority: Record<RiskLevel, number> = {
 };
 
 const riskCopy: Record<RiskLevel, string> = {
-  HIGH: 'Critical attention needed',
-  MODERATE: 'Monitor closely',
-  LOW: 'Stable',
+  HIGH: 'Immediate medical attention required',
+  MODERATE: 'Enhanced monitoring needed',
+  LOW: 'Healthy pregnancy progress',
 };
 
 const RiskFeedCard: React.FC<{data: RiskFeedItem[]}> = ({data}) => {
@@ -145,14 +145,14 @@ export const DoctorOverviewScreen: React.FC = () => {
         ListHeaderComponent={
           <>
             <AppHeader
-              title="Care command centre"
-              subtitle="Monitor escalations, prioritise outreach, and drill into patient details."
+              title="🏥 Maternal Care Hub"
+              subtitle="Monitor expecting mothers, prioritize care, and coordinate with ASHA workers."
               rightAccessory={
                 <TouchableOpacity
                   onPress={() => refetch()}
                   style={styles.refreshButton}
                   accessibilityRole="button">
-                  <Text style={styles.refreshLabel}>Refresh</Text>
+                  <Text style={styles.refreshLabel}>🔄 Refresh</Text>
                 </TouchableOpacity>
               }
             />
@@ -168,17 +168,17 @@ export const DoctorOverviewScreen: React.FC = () => {
 
             <View style={styles.statsRow}>
               <View style={[styles.statCard, styles.statCardFirst]}>
-                <Text style={styles.statLabel}>Total patients</Text>
+                <Text style={styles.statLabel}>🤱 Expecting Mothers</Text>
                 <Text style={styles.statValue}>{patients.length}</Text>
               </View>
               <View style={styles.statCard}>
-                <Text style={styles.statLabel}>High risk</Text>
+                <Text style={styles.statLabel}>🚨 Critical Care</Text>
                 <Text style={[styles.statValue, styles.statHigh]}>
                   {highRiskCount}
                 </Text>
               </View>
               <View style={[styles.statCard, styles.statCardLast]}>
-                <Text style={styles.statLabel}>Moderate risk</Text>
+                <Text style={styles.statLabel}>⚠️ Monitor Closely</Text>
                 <Text style={[styles.statValue, styles.statModerate]}>
                   {moderateRiskCount}
                 </Text>
@@ -196,10 +196,10 @@ export const DoctorOverviewScreen: React.FC = () => {
             </View>
 
             <View style={styles.sectionHeaderRow}>
-              <View>
-                <Text style={styles.sectionTitle}>Maternal Care Registry</Text>
+              <View style={styles.sectionHeaderContent}>
+                <Text style={styles.sectionTitle}>📋 Maternal Care Registry</Text>
                 <Text style={styles.sectionMeta}>
-                  Tap to open the trending dashboard with demo charts and notes.
+                  Review pregnancy progress, vital trends, and coordinate care with ASHA workers.
                 </Text>
               </View>
             </View>
@@ -236,15 +236,15 @@ export const DoctorOverviewScreen: React.FC = () => {
               </View>
             </View>
             <Text style={styles.patientHint}>
-              View demo vitals timeline, quick notes, and care plan templates.
+              👥 View pregnancy progress, vital trends, and coordinate with ASHA worker
             </Text>
           </TouchableOpacity>
         )}
         ListEmptyComponent={
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>No patients yet</Text>
+            <Text style={styles.emptyTitle}>🤱 No expecting mothers registered yet</Text>
             <Text style={styles.emptyCopy}>
-              Once ASHA workers sync LifeBand data, patients will populate here automatically.
+              ASHA workers will sync LifeBand data from pregnant women in their communities. Patients will appear here automatically once monitoring begins.
             </Text>
           </View>
         }
@@ -271,14 +271,18 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.surface,
+    backgroundColor: palette.primary,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   refreshLabel: {
-    color: palette.textOnDark,
-    fontWeight: '600',
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 12,
   },
   offlineBanner: {
     marginTop: spacing.md,
@@ -301,33 +305,39 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginTop: spacing.lg,
     marginBottom: spacing.lg,
-    justifyContent: 'space-between',
+    gap: spacing.sm,
   },
   statCard: {
     flex: 1,
-    marginHorizontal: spacing.sm / 2,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: '#102F5A',
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: '#1F3F70',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+    alignItems: 'center',
   },
   statCardFirst: {
-    marginLeft: 0,
+    backgroundColor: palette.maternal.cream,
   },
   statCardLast: {
-    marginRight: 0,
+    backgroundColor: palette.maternal.mint,
   },
   statLabel: {
-    color: '#9CB3DC',
-    fontSize: 12,
+    color: palette.textSecondary,
+    fontSize: 11,
     fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: spacing.xs,
   },
   statValue: {
-    marginTop: spacing.xs,
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
-    color: palette.textOnDark,
+    color: palette.textPrimary,
+    textAlign: 'center',
   },
   statHigh: {
     color: '#EA4335',
@@ -353,6 +363,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
+  },
+  sectionHeaderContent: {
+    flex: 1,
   },
   sectionTitle: {
     fontSize: 18,
@@ -423,6 +436,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: radii.lg,
     backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
     shadowColor: palette.shadow,
     shadowOpacity: 0.08,
     shadowRadius: 16,
@@ -431,6 +446,7 @@ const styles = StyleSheet.create({
   patientBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: spacing.sm,
   },
   patientAvatar: {
     width: 44,
