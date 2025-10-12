@@ -23,7 +23,7 @@ import {
   useSyncPatientDetail,
   useSyncPatientsList,
 } from '../../features/patients/usePatientsSync';
-import { ReadingPayload } from '../../features/patients/models'; // Update the path to the correct module
+import { ReadingPayload } from '../../features/patients/types'; // Update the path to the correct module
 import {usePatientReadings} from '../../hooks/usePatientReadings';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore} from '../../store/useReadingStore';

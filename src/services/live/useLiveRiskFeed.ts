@@ -3,7 +3,7 @@ import {WS_BASE} from '@env';
 import {useAppStore} from '../../store/useAppStore';
 import {RiskFeedItem} from '../../types/models';
 
-const LIVE_ENDPOINT = `${WS_BASE.replace(/\/$/, '')}/ws/live`;
+const LIVE_ENDPOINT = `${(WS_BASE || 'wss://localhost:8080').replace(/\/$/, '')}/ws/live`;
 
 export const useLiveRiskFeed = (enabled: boolean) => {
   const addRiskItem = useAppStore(state => state.addRiskItem);
@@ -23,35 +23,45 @@ export const useLiveRiskFeed = (enabled: boolean) => {
       if (socketRef.current) {
         return;
       }
-      const ws = new WebSocket(LIVE_ENDPOINT);
-      socketRef.current = ws;
+      
+      try {
+        const ws = new WebSocket(LIVE_ENDPOINT);
+        socketRef.current = ws;
 
-      ws.onopen = () => {
-        console.info('[LiveFeed] connected');
-      };
+        ws.onopen = () => {
+          console.info('[LiveFeed] connected');
+        };
 
-      ws.onmessage = event => {
-        try {
-          const data = JSON.parse(event.data) as RiskFeedItem;
-          if (data?.patientId && data?.risk) {
-            addRiskItem({
-              ...data,
-              receivedAt: data.receivedAt ?? new Date().toISOString(),
-            });
+        ws.onmessage = event => {
+          try {
+            const data = JSON.parse(event.data) as RiskFeedItem;
+            if (data?.patientId && data?.risk) {
+              addRiskItem({
+                ...data,
+                receivedAt: data.receivedAt ?? new Date().toISOString(),
+              });
+            }
+          } catch (error) {
+            console.warn('[LiveFeed] parse error', error);
           }
-        } catch (error) {
-          console.warn('[LiveFeed] parse error', error);
-        }
-      };
+        };
 
-      ws.onerror = error => {
-        console.warn('[LiveFeed] error', error);
-      };
+        ws.onerror = error => {
+          console.warn('[LiveFeed] connection error', error);
+          socketRef.current = null;
+        };
 
-      ws.onclose = () => {
+        ws.onclose = () => {
+          console.info('[LiveFeed] disconnected, will retry in 5s');
+          socketRef.current = null;
+          reconnectTimeout.current = setTimeout(connect, 5000);
+        };
+      } catch (error) {
+        console.warn('[LiveFeed] failed to create WebSocket connection', error);
         socketRef.current = null;
+        // Retry connection after delay
         reconnectTimeout.current = setTimeout(connect, 5000);
-      };
+      }
     };
 
     connect();

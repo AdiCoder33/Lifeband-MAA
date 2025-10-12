@@ -2,7 +2,7 @@ import axios from 'axios';
 import {API_BASE} from '@env';
 
 export const apiClient = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_BASE || 'https://lifeband-api.example.com',
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
