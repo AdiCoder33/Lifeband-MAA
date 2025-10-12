@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   containerSecondary: {
-    backgroundColor: '#F5F8FF',
+    backgroundColor: palette.maternal.cream,
   },
   label: {
     fontSize: 13,

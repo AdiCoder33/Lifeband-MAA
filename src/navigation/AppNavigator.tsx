@@ -6,6 +6,7 @@ import {useAuth, type UserRole} from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import RoleSelectionScreen from '../screens/RoleSelectionScreen';
+import ProfileScreen from '../screens/ProfileScreen';
 import ScanConnectScreen from '../screens/asha/ScanConnectScreen';
 import LiveStreamScreen from '../screens/asha/LiveStreamScreen';
 import DoctorNavigator from './DoctorNavigator';
@@ -17,6 +18,7 @@ export type RootStackParamList = {
   Register: undefined;
   RoleSelection: undefined;
   Main: undefined;
+  Profile: undefined;
 };
 
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -114,7 +116,17 @@ export const AppNavigator: React.FC = () => {
             component={RoleSelectionScreen}
           />
         ) : (
-          <RootStack.Screen name="Main" component={MainSwitch} />
+          <>
+            <RootStack.Screen name="Main" component={MainSwitch} />
+            <RootStack.Screen 
+              name="Profile" 
+              component={ProfileScreen}
+              options={{
+                presentation: 'modal',
+                animation: 'slide_from_bottom',
+              }}
+            />
+          </>
         )}
       </RootStack.Navigator>
     </NavigationContainer>

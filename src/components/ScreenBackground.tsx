@@ -28,9 +28,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: palette.background,
-    borderBottomLeftRadius: 36,
-    borderBottomRightRadius: 36,
+    backgroundColor: palette.backgroundSoft,
   },
   content: {
     flex: 1,

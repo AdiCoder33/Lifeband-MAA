@@ -34,9 +34,9 @@ const RiskFeedCard: React.FC<{data: RiskFeedItem[]}> = ({data}) => {
   if (!data.length) {
     return (
       <View style={styles.riskEmpty}>
-        <Text style={styles.riskEmptyTitle}>No active escalations</Text>
+        <Text style={styles.riskEmptyTitle}>All mothers are doing well 💕</Text>
         <Text style={styles.riskEmptyCopy}>
-          Live alerts raised by ASHA workers and wearables will appear here instantly.
+          Maternal care alerts from ASHA workers and monitoring devices will appear here when attention is needed.
         </Text>
       </View>
     );
@@ -73,19 +73,19 @@ const riskBadgeStyles: Record<
   {backgroundColor: string; borderColor: string; color: string}
 > = {
   HIGH: {
-    backgroundColor: '#3B0A0A',
-    borderColor: '#EA4335',
-    color: '#EA4335',
+    backgroundColor: palette.maternal.blush,
+    borderColor: palette.danger,
+    color: palette.danger,
   },
   MODERATE: {
-    backgroundColor: '#3A2609',
-    borderColor: '#F9AB00',
-    color: '#F9AB00',
+    backgroundColor: palette.maternal.peach,
+    borderColor: palette.warning,
+    color: palette.textPrimary,
   },
   LOW: {
-    backgroundColor: '#06351F',
-    borderColor: '#34A853',
-    color: '#34A853',
+    backgroundColor: palette.maternal.mint,
+    borderColor: palette.success,
+    color: palette.textPrimary,
   },
 };
 
@@ -149,7 +149,7 @@ export const DoctorOverviewScreen: React.FC = () => {
               subtitle="Monitor escalations, prioritise outreach, and drill into patient details."
               rightAccessory={
                 <TouchableOpacity
-                  onPress={refetch}
+                  onPress={() => refetch()}
                   style={styles.refreshButton}
                   accessibilityRole="button">
                   <Text style={styles.refreshLabel}>Refresh</Text>
@@ -187,9 +187,9 @@ export const DoctorOverviewScreen: React.FC = () => {
 
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Live risk feed</Text>
+                <Text style={styles.sectionTitle}>Maternal Care Alerts</Text>
                 <Text style={styles.sectionMeta}>
-                  Latest escalations from wearables and ASHA submissions.
+                  Live alerts for expecting mothers and newborns from monitoring devices and ASHA workers.
                 </Text>
               </View>
               <RiskFeedCard data={riskFeed} />
@@ -197,7 +197,7 @@ export const DoctorOverviewScreen: React.FC = () => {
 
             <View style={styles.sectionHeaderRow}>
               <View>
-                <Text style={styles.sectionTitle}>Patient roster</Text>
+                <Text style={styles.sectionTitle}>Maternal Care Registry</Text>
                 <Text style={styles.sectionMeta}>
                   Tap to open the trending dashboard with demo charts and notes.
                 </Text>
@@ -436,14 +436,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#102F5A',
+    backgroundColor: palette.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.md,
   },
   patientAvatarLabel: {
     fontWeight: '700',
-    color: palette.textOnDark,
+    color: palette.textOnPrimary,
     fontSize: 18,
   },
   patientInfo: {
@@ -477,20 +477,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     padding: spacing.xl,
     borderRadius: radii.lg,
-    backgroundColor: '#0F2B50',
+    backgroundColor: palette.maternal.lavender,
     borderWidth: 1,
-    borderColor: '#1F3F70',
+    borderColor: palette.border,
     alignItems: 'center',
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: palette.textOnDark,
+    color: palette.textPrimary,
   },
   emptyCopy: {
     marginTop: spacing.sm,
     fontSize: 13,
-    color: '#9CB3DC',
+    color: palette.textSecondary,
     textAlign: 'center',
   },
 });

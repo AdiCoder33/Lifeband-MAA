@@ -16,27 +16,29 @@ const ROLES: {
   role: UserRole;
   description: string;
   highlights: string[];
+  icon: string;
   color: string;
 }[] = [
   {
     role: 'ASHA',
-    description: 'Capture vitals, sync devices, and triage escalations in the field.',
-    highlights: ['Quick scan & connect', 'Offline capture', 'Sync to doctors'],
-    color: '#7AA6F8',
+    description: 'Support expecting mothers with vital monitoring and care coordination in the community.',
+    highlights: ['Maternal health checks', 'Prenatal monitoring', 'Emergency alerts'],
+    icon: '👩‍⚕️',
+    color: palette.primary,
   },
   {
     role: 'Doctor',
-    description:
-      'Review dashboards, monitor risk alerts, and coordinate clinical interventions.',
-    highlights: ['Live risk feed', 'Patient drill-downs', 'Care summaries'],
-    color: '#F9AB00',
+    description: 'Monitor maternal health, review pregnancy risks, and coordinate specialized care.',
+    highlights: ['Pregnancy monitoring', 'Risk assessment', 'Care coordination'],
+    icon: '🩺',
+    color: palette.accent,
   },
   {
     role: 'Patient',
-    description:
-      'Track shared vitals, understand demo charts, and follow guided care plans.',
-    highlights: ['Vitals overview', 'Demo charts', 'Care tips'],
-    color: '#7CE3B1',
+    description: 'Track your pregnancy journey, monitor baby\'s health, and follow care guidance.',
+    highlights: ['Baby monitoring', 'Health tracking', 'Care reminders'],
+    icon: '🤱',
+    color: palette.success,
   },
 ];
 
@@ -57,23 +59,15 @@ export const RoleSelectionScreen: React.FC = () => {
     <ScreenBackground>
       <ScrollView contentContainerStyle={styles.content}>
         <AppHeader
-          title={`Welcome${name ? `, ${name}` : ''}`}
-          subtitle="Choose how you want to explore LifeBand today."
-          rightAccessory={
-            <TouchableOpacity
-              onPress={logout}
-              style={styles.logoutButton}
-              accessibilityRole="button">
-              <Text style={styles.logoutLabel}>Sign out</Text>
-            </TouchableOpacity>
-          }
+          title={`Welcome${name ? `, ${name}` : ''} 💕`}
+          subtitle="Choose your role in our maternal care community."
         />
 
         <View style={styles.metaCard}>
           <View>
             <Text style={styles.metaTitle}>Your credentials</Text>
             <Text style={styles.metaCopy}>
-              Signed in with {email ?? identifier ?? 'your ID'}. Switch roles any time without logging out.
+              Signed in with {email ?? identifier ?? 'your ID'}. Switch between care roles anytime to support maternal health.
             </Text>
           </View>
           <View style={styles.badgesRow}>
@@ -101,8 +95,8 @@ export const RoleSelectionScreen: React.FC = () => {
                     styles.roleAvatar,
                     {backgroundColor: `${item.color}33`},
                   ]}>
-                  <Text style={[styles.roleAvatarLabel, {color: item.color}]}>
-                    {item.role.charAt(0)}
+                  <Text style={styles.roleAvatarEmoji}>
+                    {item.icon}
                   </Text>
                 </View>
                 <Text style={styles.roleTitle}>{item.role}</Text>
@@ -125,51 +119,43 @@ export const RoleSelectionScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   content: {
-    padding: spacing.lg,
-  },
-  logoutButton: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.surface,
-  },
-  logoutLabel: {
-    color: palette.textOnDark,
-    fontWeight: '600',
+    padding: spacing.md,
   },
   metaCard: {
     marginTop: spacing.lg,
-    padding: spacing.lg,
+    padding: spacing.md,
     borderRadius: radii.lg,
     backgroundColor: palette.surface,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     shadowColor: palette.shadow,
     shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 6,
   },
   metaTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: palette.textPrimary,
   },
   metaCopy: {
     marginTop: spacing.xs,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
     color: palette.textSecondary,
-    maxWidth: 260,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   badgesRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
   },
   badge: {
-    marginLeft: spacing.md,
+    flex: 1,
+    marginHorizontal: spacing.xs,
   },
   badgeLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     color: palette.textSecondary,
   },
@@ -177,6 +163,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '700',
     color: palette.textPrimary,
+    fontSize: 12,
   },
   rolesGrid: {
     marginTop: spacing.xl,
@@ -198,25 +185,31 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   roleAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: spacing.sm,
   },
   roleAvatarLabel: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
   },
-  roleTitle: {
+  roleAvatarEmoji: {
     fontSize: 20,
+  },
+  roleTitle: {
+    fontSize: 18,
     fontWeight: '700',
     color: palette.textPrimary,
+    flex: 1,
   },
   roleDescription: {
     color: palette.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: spacing.xs,
   },
   roleHighlights: {
     flexDirection: 'row',

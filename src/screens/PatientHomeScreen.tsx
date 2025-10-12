@@ -304,9 +304,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
-    backgroundColor: '#E9F0FF',
+    backgroundColor: palette.maternal.mint,
     fontWeight: '700',
-    color: palette.primary,
+    color: palette.textPrimary,
   },
   heroCopy: {
     marginTop: spacing.xs,
@@ -316,6 +316,7 @@ const styles = StyleSheet.create({
   tilesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
   chartRow: {
     flexDirection: 'column',
@@ -347,14 +348,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     padding: spacing.lg,
     borderRadius: radii.lg,
-    backgroundColor: '#0F2B50',
+    backgroundColor: palette.maternal.cream,
     borderWidth: 1,
-    borderColor: '#1F3F70',
+    borderColor: palette.border,
   },
   careTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: palette.textOnDark,
+    color: palette.textPrimary,
     marginBottom: spacing.sm,
   },
   careRow: {
@@ -372,7 +373,7 @@ const styles = StyleSheet.create({
   },
   careText: {
     flex: 1,
-    color: '#9CB3DC',
+    color: palette.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },

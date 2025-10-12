@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useState, useEffect, useRef} from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -8,89 +8,163 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import ScreenBackground from '../components/ScreenBackground';
+import LoadingScreen from '../components/LoadingScreen';
 import {useAuth} from '../context/AuthContext';
 import {palette, radii, spacing} from '../theme';
 import type {RootStackParamList} from '../navigation/AppNavigator';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
-const insightCards = [
-  {
-    title: 'Real-time vitals',
-    copy: 'Stream heart rate, SpO2, blood pressure, and temperature in seconds.',
-  },
-  {
-    title: 'Smart escalations',
-    copy: 'AI-assisted risk triage helps doctors prioritise care decisions.',
-  },
-  {
-    title: 'Offline resilience',
-    copy: 'ASHA workers can capture vitals anywhere and sync once back online.',
-  },
-];
-
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
   const {login, loginWithGoogle} = useAuth();
   const [fullName, setFullName] = useState('');
   const [identifier, setIdentifier] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Animation values
+  const heartAnimation = useRef(new Animated.Value(1)).current;
+  const connectionAnimation = useRef(new Animated.Value(0)).current;
+
+  // Start animations on component mount
+  useEffect(() => {
+    // Heartbeat animation
+    const heartbeat = () => {
+      Animated.sequence([
+        Animated.timing(heartAnimation, {
+          toValue: 1.3,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1.2,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setTimeout(heartbeat, 2000); // Repeat every 2 seconds
+      });
+    };
+
+    // Connection line pulse animation
+    const connectionPulse = () => {
+      Animated.sequence([
+        Animated.timing(connectionAnimation, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+        Animated.timing(connectionAnimation, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+      ]).start(() => {
+        setTimeout(connectionPulse, 1000);
+      });
+    };
+
+    heartbeat();
+    connectionPulse();
+  }, [heartAnimation, connectionAnimation]);
 
   const isDisabled = useMemo(
-    () => !fullName.trim() || !identifier.trim(),
-    [fullName, identifier],
+    () => !fullName.trim() || !identifier.trim() || isLoading,
+    [fullName, identifier, isLoading],
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isDisabled) {
       return;
     }
+    
+    setIsLoading(true);
+    
+    // Show loading screen for a moment to demonstrate the features
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
     login({
       name: fullName.trim(),
       identifier: identifier.trim(),
       email: identifier.includes('@') ? identifier.trim() : undefined,
     });
+    
+    setIsLoading(false);
+  };
+
+  const handleGoogleLogin = async () => {
+    setIsLoading(true);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    loginWithGoogle();
+    setIsLoading(false);
   };
 
   return (
-    <ScreenBackground>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled">
-          <View style={styles.hero}>
-            <Text style={styles.brandBadge}>LifeBand MAA</Text>
-            <Text style={styles.heroTitle}>
-              Connected care for every community
-            </Text>
-            <Text style={styles.heroCopy}>
-              Monitor vitals, coordinate care teams, and keep patients informed
-              with a single secure platform.
-            </Text>
-            <View style={styles.cardRow}>
-              {insightCards.map(item => (
-                <View key={item.title} style={styles.insightCard}>
-                  <Text style={styles.insightTitle}>{item.title}</Text>
-                  <Text style={styles.insightCopy}>{item.copy}</Text>
-                </View>
-              ))}
+    <>
+      <ScreenBackground>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled">
+          {/* Beautiful Mother & Baby Animation */}
+          <View style={styles.animationContainer}>
+            <Text style={styles.appTitle}>LifeBand MAA</Text>
+            <View style={styles.motherBabyAnimation}>
+              <View style={styles.motherContainer}>
+                <Text style={styles.motherIcon}>🤰</Text>
+                <Text style={styles.motherLabel}>You</Text>
+              </View>
+              <View style={styles.connectionContainer}>
+                <Animated.View style={[styles.connectionLine, {
+                  backgroundColor: connectionAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#E57373', '#F48FB1']
+                  })
+                }]} />
+                <Animated.Text style={[styles.heartIcon, {
+                  transform: [{ scale: heartAnimation }]
+                }]}>💓</Animated.Text>
+                <Animated.View style={[styles.connectionLine, {
+                  backgroundColor: connectionAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#E57373', '#F48FB1']
+                  })
+                }]} />
+              </View>
+              <View style={styles.babyContainer}>
+                <Text style={styles.babyIcon}>👶</Text>
+                <Text style={styles.babyLabel}>Baby</Text>
+              </View>
             </View>
+            <Text style={styles.animationSubtext}>Healthy together</Text>
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Sign in to continue</Text>
-            <Text style={styles.formSubtitle}>
-              Use your LifeBand credentials or sign in with Google.
-            </Text>
+            <View style={styles.formHeader}>
+              <Text style={styles.formTitle}>Sign In</Text>
+            </View>
 
             <TouchableOpacity
               style={styles.googleButton}
-              onPress={loginWithGoogle}
+              onPress={handleGoogleLogin}
+              disabled={isLoading}
               accessibilityRole="button">
               <Text style={styles.googleIcon}>G</Text>
               <Text style={styles.googleLabel}>Sign in with Google</Text>
@@ -131,7 +205,9 @@ export const LoginScreen: React.FC = () => {
               onPress={handleSubmit}
               disabled={isDisabled}
               style={[styles.primaryButton, isDisabled && styles.buttonDisabled]}>
-              <Text style={styles.primaryButtonLabel}>Continue</Text>
+              <Text style={styles.primaryButtonLabel}>
+                {isLoading ? 'Preparing your care...' : 'Continue'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -144,6 +220,12 @@ export const LoginScreen: React.FC = () => {
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenBackground>
+    
+    <LoadingScreen 
+      visible={isLoading} 
+      message={isLoading ? "Setting up your maternal care dashboard..." : undefined} 
+    />
+  </>
   );
 };
 
@@ -152,33 +234,73 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: spacing.lg,
-  },
-  hero: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  brandBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: '#102F5F',
-    color: palette.primaryLight,
-    fontWeight: '700',
+    paddingVertical: spacing.lg,
   },
-  heroTitle: {
-    marginTop: spacing.md,
+  // Simple Animation Styles
+  animationContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  appTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: palette.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  motherBabyAnimation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  motherContainer: {
+    alignItems: 'center',
+  },
+  motherIcon: {
     fontSize: 32,
-    lineHeight: 40,
-    fontWeight: '700',
-    color: palette.textOnDark,
+    marginBottom: spacing.xs,
   },
-  heroCopy: {
-    marginTop: spacing.sm,
+  motherLabel: {
+    fontSize: 10,
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  connectionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.md,
+  },
+  connectionLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: palette.primary,
+    borderRadius: 1,
+  },
+  heartIcon: {
     fontSize: 16,
-    lineHeight: 22,
-    color: '#9CB3DC',
+    marginHorizontal: spacing.xs,
+  },
+  babyContainer: {
+    alignItems: 'center',
+  },
+  babyIcon: {
+    fontSize: 32,
+    marginBottom: spacing.xs,
+  },
+  babyLabel: {
+    fontSize: 10,
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  animationSubtext: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    fontStyle: 'italic',
+    marginTop: spacing.sm,
   },
   cardRow: {
     marginTop: spacing.lg,
@@ -187,23 +309,36 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: '#102C56',
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: '#1D3F70',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  insightIcon: {
+    fontSize: 24,
+    marginRight: spacing.sm,
   },
   insightTitle: {
     fontWeight: '700',
-    color: palette.textOnDark,
-    marginBottom: spacing.xs,
+    color: palette.textPrimary,
+    flex: 1,
   },
   insightCopy: {
-    color: '#9CB3DC',
+    color: palette.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },
   formCard: {
-    padding: spacing.xl,
-    borderRadius: 28,
+    padding: spacing.lg,
+    borderRadius: 24,
     backgroundColor: palette.surface,
     shadowColor: palette.shadow,
     shadowOpacity: 0.18,
@@ -211,13 +346,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   formTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: palette.textPrimary,
   },
   formSubtitle: {
     marginTop: spacing.xs,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
     color: palette.textSecondary,
   },
   googleButton: {
@@ -257,6 +393,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  formHeader: {
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
   field: {
     marginBottom: spacing.md,
   },
@@ -288,7 +428,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   buttonDisabled: {
-    backgroundColor: '#A7C4FB',
+    backgroundColor: palette.maternal.blush,
+    opacity: 0.7,
   },
   primaryButtonLabel: {
     color: palette.textOnPrimary,
