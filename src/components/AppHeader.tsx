@@ -44,8 +44,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
 
   const handleViewProfile = () => {
     setShowProfileMenu(false);
-    // @ts-ignore - navigation types not set up for ProfileScreen yet
-    navigation.navigate('Profile');
+    // Navigate to Profile screen within the current stack
+    navigation.navigate('Profile' as never);
   };
 
   const handleSignOut = () => {

@@ -24,6 +24,8 @@ export type RootStackParamList = {
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 const Tab = createBottomTabNavigator();
+const AshaStack = createNativeStackNavigator();
+const PatientStack = createNativeStackNavigator();
 
 const AshaTabs = () => (
   <Tab.Navigator
@@ -61,10 +63,46 @@ const AshaTabs = () => (
   </Tab.Navigator>
 );
 
+const AshaNavigator = () => (
+  <AshaStack.Navigator
+    screenOptions={{
+      headerShown: false,
+      contentStyle: {backgroundColor: palette.background},
+    }}>
+    <AshaStack.Screen name="AshaTabs" component={AshaTabs} />
+    <AshaStack.Screen 
+      name="Profile" 
+      component={ProfileScreen}
+      options={{
+        presentation: 'modal',
+        animation: 'slide_from_bottom',
+      }}
+    />
+  </AshaStack.Navigator>
+);
+
+const PatientNavigator = () => (
+  <PatientStack.Navigator
+    screenOptions={{
+      headerShown: false,
+      contentStyle: {backgroundColor: palette.background},
+    }}>
+    <PatientStack.Screen name="PatientHome" component={PatientHomeScreen} />
+    <PatientStack.Screen 
+      name="Profile" 
+      component={ProfileScreen}
+      options={{
+        presentation: 'modal',
+        animation: 'slide_from_bottom',
+      }}
+    />
+  </PatientStack.Navigator>
+);
+
 const roleToComponent: Record<UserRole, React.FC> = {
-  ASHA: AshaTabs,
+  ASHA: AshaNavigator,
   Doctor: DoctorNavigator,
-  Patient: PatientHomeScreen,
+  Patient: PatientNavigator,
 };
 
 const MainSwitch: React.FC = () => {

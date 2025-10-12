@@ -4,7 +4,9 @@ import React, {
   useContext,
   useMemo,
   useReducer,
+  useEffect,
 } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type UserRole = 'ASHA' | 'Doctor' | 'Patient';
 
@@ -19,9 +21,10 @@ type AuthState = {
 type AuthAction =
   | {
       type: 'LOGIN';
-      payload: {name: string; identifier: string; email?: string};
+      payload: {name: string; identifier: string; email?: string; role?: UserRole};
     }
   | {type: 'SET_ROLE'; payload: UserRole}
+  | {type: 'RESTORE_AUTH'; payload: AuthState}
   | {type: 'LOGOUT'};
 
 type LoginPayload = {name: string; identifier: string; email?: string};
@@ -58,12 +61,15 @@ const reducer = (state: AuthState, action: AuthAction): AuthState => {
         name: action.payload.name,
         identifier: action.payload.identifier,
         email: action.payload.email,
+        role: action.payload.role,
       };
     case 'SET_ROLE':
       return {
         ...state,
         role: action.payload,
       };
+    case 'RESTORE_AUTH':
+      return action.payload;
     case 'LOGOUT':
       return initialState;
     default:
@@ -76,9 +82,54 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  // Load persisted auth state on app start
+  useEffect(() => {
+    const loadAuthState = async () => {
+      try {
+        const authData = await AsyncStorage.getItem('authState');
+        if (authData) {
+          const parsedAuth = JSON.parse(authData);
+          dispatch({type: 'RESTORE_AUTH', payload: parsedAuth});
+        }
+      } catch (error) {
+        console.log('Failed to load auth state:', error);
+      }
+    };
+    loadAuthState();
+  }, []);
+
+  // Save auth state whenever it changes
+  useEffect(() => {
+    const saveAuthState = async () => {
+      try {
+        await AsyncStorage.setItem('authState', JSON.stringify(state));
+      } catch (error) {
+        console.log('Failed to save auth state:', error);
+      }
+    };
+    
+    if (state.isAuthenticated) {
+      saveAuthState();
+    }
+  }, [state]);
+
   const login = useCallback(
-    ({name, identifier, email}: LoginPayload) => {
-      dispatch({type: 'LOGIN', payload: {name, identifier, email}});
+    async ({name, identifier, email}: LoginPayload) => {
+      // Check if user already has a saved role
+      try {
+        const savedRole = await AsyncStorage.getItem(`userRole_${identifier}`);
+        dispatch({
+          type: 'LOGIN', 
+          payload: {
+            name, 
+            identifier, 
+            email,
+            role: savedRole ? (savedRole as UserRole) : undefined
+          }
+        });
+      } catch (error) {
+        dispatch({type: 'LOGIN', payload: {name, identifier, email}});
+      }
     },
     [],
   );
@@ -108,11 +159,24 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
     });
   }, []);
 
-  const selectRole = useCallback((role: UserRole) => {
+  const selectRole = useCallback(async (role: UserRole) => {
+    // Save role permanently for this user
+    if (state.identifier) {
+      try {
+        await AsyncStorage.setItem(`userRole_${state.identifier}`, role);
+      } catch (error) {
+        console.log('Failed to save user role:', error);
+      }
+    }
     dispatch({type: 'SET_ROLE', payload: role});
-  }, []);
+  }, [state.identifier]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await AsyncStorage.removeItem('authState');
+    } catch (error) {
+      console.log('Failed to clear auth state:', error);
+    }
     dispatch({type: 'LOGOUT'});
   }, []);
 

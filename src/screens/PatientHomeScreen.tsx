@@ -1,5 +1,5 @@
 import React, {useMemo} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import {ScrollView, StyleSheet, Text, View, Dimensions} from 'react-native';
 import {
   VictoryArea,
   VictoryAxis,
@@ -18,6 +18,8 @@ import {palette, radii, spacing} from '../theme';
 
 const now = Date.now();
 const hour = 60 * 60 * 1000;
+const screenWidth = Dimensions.get('window').width;
+const chartWidth = screenWidth - 80; // Account for padding and margins
 
 const demoHeartTrend = new Array(6).fill(0).map((_, index) => ({
   x: new Date(now - (5 - index) * hour),
@@ -148,11 +150,13 @@ export const PatientHomeScreen: React.FC = () => {
 
         <View style={styles.chartRow}>
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Heart rate trend</Text>
+            <Text style={styles.chartTitle}>💓 Heart Rate Trend</Text>
+            <Text style={styles.chartSubtitle}>Your baby's heartbeat rhythm</Text>
             <VictoryChart
               theme={VictoryTheme.material}
-              height={220}
-              padding={{top: 16, left: 48, right: 16, bottom: 40}}
+              height={180}
+              width={chartWidth}
+              padding={{top: 16, left: 50, right: 20, bottom: 45}}
               scale={{x: 'time'}}>
               <VictoryAxis
                 tickFormat={(value: Date | string | number) =>
@@ -162,37 +166,55 @@ export const PatientHomeScreen: React.FC = () => {
                   })
                 }
                 style={{
-                  tickLabels: {fontSize: 11, fill: palette.textSecondary},
+                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                  grid: {stroke: palette.border, strokeWidth: 0.5},
                 }}
               />
               <VictoryAxis
                 dependentAxis
                 tickFormat={(value: number) => `${value}`}
                 style={{
-                  tickLabels: {fontSize: 11, fill: palette.textSecondary},
+                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                  grid: {stroke: palette.border, strokeWidth: 0.5},
                 }}
               />
               <VictoryArea
                 interpolation="monotoneX"
                 style={{
-                  data: {fill: '#4C8BF522', stroke: '#4C8BF5', strokeWidth: 3},
+                  data: {fill: palette.maternal.blush + '40', stroke: palette.primary, strokeWidth: 2},
                 }}
                 data={heartSeries}
               />
             </VictoryChart>
             {!hasLiveData ? (
               <Text style={styles.chartHint}>
-                Demo chart: illustrates how your heart rate trend will appear.
+                🔄 Demo preview - Connect LifeBand for real-time monitoring
               </Text>
             ) : null}
           </View>
 
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Oxygen & pressure</Text>
+            <Text style={styles.chartTitle}>🫁 Oxygen & Blood Pressure</Text>
+            <Text style={styles.chartSubtitle}>Your health vitals overview</Text>
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, {backgroundColor: palette.maternal.mint}]} />
+                <Text style={styles.legendText}>SpO2</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, {backgroundColor: palette.maternal.peach}]} />
+                <Text style={styles.legendText}>Systolic</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendColor, {backgroundColor: palette.primary}]} />
+                <Text style={styles.legendText}>Diastolic</Text>
+              </View>
+            </View>
             <VictoryChart
               theme={VictoryTheme.material}
-              height={220}
-              padding={{top: 16, left: 48, right: 16, bottom: 40}}
+              height={180}
+              width={chartWidth}
+              padding={{top: 16, left: 50, right: 20, bottom: 45}}
               scale={{x: 'time'}}>
               <VictoryAxis
                 tickFormat={(value: Date | string | number) =>
@@ -202,20 +224,22 @@ export const PatientHomeScreen: React.FC = () => {
                   })
                 }
                 style={{
-                  tickLabels: {fontSize: 11, fill: palette.textSecondary},
+                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                  grid: {stroke: palette.border, strokeWidth: 0.5},
                 }}
               />
               <VictoryAxis
                 dependentAxis
                 tickFormat={(value: number) => `${value}`}
                 style={{
-                  tickLabels: {fontSize: 11, fill: palette.textSecondary},
+                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                  grid: {stroke: palette.border, strokeWidth: 0.5},
                 }}
               />
               <VictoryGroup>
                 <VictoryLine
                   data={spo2Series}
-                  style={{data: {stroke: '#34A853', strokeWidth: 3}}}
+                  style={{data: {stroke: palette.maternal.mint, strokeWidth: 2}}}
                   interpolation="monotoneX"
                 />
                 <VictoryLine
@@ -223,14 +247,14 @@ export const PatientHomeScreen: React.FC = () => {
                     x: item.x,
                     y: item.systolic,
                   }))}
-                  style={{data: {stroke: '#F9AB00', strokeWidth: 2}}}
+                  style={{data: {stroke: palette.maternal.peach, strokeWidth: 2}}}
                 />
                 <VictoryLine
                   data={bloodPressureSeries.map(item => ({
                     x: item.x,
                     y: item.diastolic,
                   }))}
-                  style={{data: {stroke: '#EA4335', strokeWidth: 2}}}
+                  style={{data: {stroke: palette.primary, strokeWidth: 2}}}
                 />
               </VictoryGroup>
             </VictoryChart>
@@ -243,23 +267,29 @@ export const PatientHomeScreen: React.FC = () => {
         </View>
 
         <View style={styles.carePlanCard}>
-          <Text style={styles.careTitle}>Care plan checklist</Text>
+          <Text style={styles.careTitle}>🤱 Your Pregnancy Care Plan</Text>
           <View style={styles.careRow}>
-            <View style={styles.careBullet} />
+            <Text style={styles.careIcon}>💓</Text>
             <Text style={styles.careText}>
-              Keep your LifeBand charged and close to your wrist for continuous tracking.
+              Keep your LifeBand positioned comfortably for continuous baby monitoring.
             </Text>
           </View>
           <View style={styles.careRow}>
-            <View style={styles.careBullet} />
+            <Text style={styles.careIcon}>📊</Text>
             <Text style={styles.careText}>
-              Explore personalised insights under the doctor role to understand escalations.
+              Review your health trends daily to stay informed about your wellness journey.
             </Text>
           </View>
           <View style={styles.careRow}>
-            <View style={styles.careBullet} />
+            <Text style={styles.careIcon}>👩‍⚕️</Text>
             <Text style={styles.careText}>
-              Share this dashboard with your care team for collaborative decision making.
+              Share this dashboard with your doctor and ASHA worker for comprehensive care.
+            </Text>
+          </View>
+          <View style={styles.careRow}>
+            <Text style={styles.careIcon}>🚨</Text>
+            <Text style={styles.careText}>
+              Contact your healthcare provider immediately if you notice any concerning changes.
             </Text>
           </View>
         </View>
@@ -336,7 +366,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    marginBottom: spacing.md,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
     marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendColor: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: spacing.xs,
+  },
+  legendText: {
+    fontSize: 11,
+    color: palette.textSecondary,
+    fontWeight: '600',
   },
   chartHint: {
     marginTop: spacing.sm,
@@ -363,13 +419,10 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginTop: spacing.sm,
   },
-  careBullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: palette.primary,
+  careIcon: {
+    fontSize: 18,
     marginRight: spacing.sm,
-    marginTop: spacing.xs,
+    marginTop: 2,
   },
   careText: {
     flex: 1,
