@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import ScreenBackground from '../../components/ScreenBackground';
-import AppHeader from '../../components/AppHeader';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore as useReadingStoreHook} from '../../store/useReadingStore';
 import {useLiveRiskFeed} from '../../services/live/useLiveRiskFeed';
@@ -144,19 +143,6 @@ export const DoctorOverviewScreen: React.FC = () => {
         contentContainerStyle={styles.content}
         ListHeaderComponent={
           <>
-            <AppHeader
-              title="🏥 Maternal Care Hub"
-              subtitle="Monitor expecting mothers, prioritize care, and coordinate with ASHA workers."
-              rightAccessory={
-                <TouchableOpacity
-                  onPress={() => refetch()}
-                  style={styles.refreshButton}
-                  accessibilityRole="button">
-                  <Text style={styles.refreshLabel}>🔄 Refresh</Text>
-                </TouchableOpacity>
-              }
-            />
-
             {offline ? (
               <View style={styles.offlineBanner}>
                 <Text style={styles.offlineTitle}>Offline mode</Text>

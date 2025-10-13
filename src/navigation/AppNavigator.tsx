@@ -1,22 +1,25 @@
-import React, {useMemo} from 'react';
+import React, {useMemo, useState} from 'react';
+import {View, Text} from 'react-native';
 import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {useAuth, type UserRole} from '../context/AuthContext';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
-import RoleSelectionScreen from '../screens/RoleSelectionScreen';
+
 import ProfileScreen from '../screens/ProfileScreen';
 import ScanConnectScreen from '../screens/asha/ScanConnectScreen';
 import LiveStreamScreen from '../screens/asha/LiveStreamScreen';
 import DoctorNavigator from './DoctorNavigator';
+import CustomDoctorDrawer from './CustomDoctorDrawer';
+import CustomAshaDrawer from './CustomAshaDrawer';
 import PatientHomeScreen from '../screens/PatientHomeScreen';
+import CustomDrawer from './CustomDrawer';
 import {palette} from '../theme';
 
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  RoleSelection: undefined;
   Main: undefined;
   Profile: undefined;
 };
@@ -81,34 +84,38 @@ const AshaNavigator = () => (
   </AshaStack.Navigator>
 );
 
-const PatientNavigator = () => (
-  <PatientStack.Navigator
-    screenOptions={{
-      headerShown: false,
-      contentStyle: {backgroundColor: palette.background},
-    }}>
-    <PatientStack.Screen name="PatientHome" component={PatientHomeScreen} />
-    <PatientStack.Screen 
-      name="Profile" 
-      component={ProfileScreen}
-      options={{
-        presentation: 'modal',
-        animation: 'slide_from_bottom',
-      }}
+const PatientNavigator = () => {
+  const [isConnected, setIsConnected] = useState(false);
+
+  const handleBandPress = () => {
+    // Handle band connection/scan logic
+    setIsConnected(!isConnected);
+  };
+
+  return (
+    <CustomDrawer 
+      isConnected={isConnected} 
+      onBandPress={handleBandPress} 
     />
-  </PatientStack.Navigator>
-);
+  );
+};
 
 const roleToComponent: Record<UserRole, React.FC> = {
-  ASHA: AshaNavigator,
-  Doctor: DoctorNavigator,
+  ASHA: CustomAshaDrawer,
+  Doctor: CustomDoctorDrawer,
   Patient: PatientNavigator,
 };
 
 const MainSwitch: React.FC = () => {
   const {role} = useAuth();
+  
   if (!role) {
-    return null;
+    // Return a loading component instead of null to prevent blank screen
+    return (
+      <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: palette.background}}>
+        <Text style={{color: palette.textPrimary, fontSize: 16}}>Loading your dashboard...</Text>
+      </View>
+    );
   }
   const Component = roleToComponent[role];
   return <Component />;
@@ -148,11 +155,6 @@ export const AppNavigator: React.FC = () => {
               options={{presentation: 'card'}}
             />
           </>
-        ) : !role ? (
-          <RootStack.Screen
-            name="RoleSelection"
-            component={RoleSelectionScreen}
-          />
         ) : (
           <>
             <RootStack.Screen name="Main" component={MainSwitch} />

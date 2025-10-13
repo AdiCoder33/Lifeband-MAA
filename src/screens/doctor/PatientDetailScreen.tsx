@@ -15,7 +15,7 @@ import {
   VictoryTheme,
 } from 'victory-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import AppHeader from '../../components/AppHeader';
+
 import ReadingTile from '../../components/ReadingTile';
 import {DoctorStackParamList} from '../../navigation/DoctorNavigator';
 import {usePatientDetailQuery} from '../../features/patients/queries';
@@ -106,10 +106,7 @@ export const PatientDetailScreen: React.FC = () => {
   return (
     <ScreenBackground>
       <ScrollView contentContainerStyle={styles.content}>
-        <AppHeader
-          title={patientName}
-          subtitle="Dive into vitals, demo charts, and care insights tailored to this patient."
-        />
+
 
         <View style={styles.topCard}>
           <View style={styles.topLeft}>

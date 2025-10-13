@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -11,7 +12,7 @@ import {
 } from 'react-native';
 import {DEVICE_NAME_PREFIX as ENV_DEVICE_PREFIX} from '@env';
 import ScreenBackground from '../../components/ScreenBackground';
-import AppHeader from '../../components/AppHeader';
+
 import {useBle} from '../../features/ble/BleProvider';
 import type {BleDevice} from '../../features/ble/types';
 import {ConnectionStatus} from '../../components/ConnectionStatus';
@@ -112,21 +113,12 @@ export const ScanConnectScreen: React.FC = () => {
 
   return (
     <ScreenBackground>
-      <View style={styles.content}>
-        <AppHeader
-          title="Scan & connect LifeBand devices"
-          subtitle="Discover nearby wearables, link them to patients, and keep data flowing."
-          rightAccessory={
-            <TouchableOpacity
-              onPress={isScanning ? stop : () => handleStart()}
-              style={styles.scanButton}
-              accessibilityRole="button">
-              <Text style={styles.scanButtonLabel}>
-                {isScanning ? 'Stop scan' : 'Start scan'}
-              </Text>
-            </TouchableOpacity>
-          }
-        />
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled">
+
 
         <View style={styles.statusCard}>
           <ConnectionStatus
@@ -162,7 +154,7 @@ export const ScanConnectScreen: React.FC = () => {
         </View>
 
         <View style={styles.formCard}>
-          <Text style={styles.sectionTitle}>Device matching</Text>
+          <Text style={styles.sectionTitle}>📱 Device Configuration</Text>
           <View style={styles.fieldRow}>
             <View style={styles.field}>
               <Text style={styles.label}>Device name prefix</Text>
@@ -183,15 +175,15 @@ export const ScanConnectScreen: React.FC = () => {
           </View>
 
           <Text style={[styles.sectionTitle, styles.sectionSpacing]}>
-            Patient linkage
+            🤰 Maternal Care ID
           </Text>
           <View style={styles.fieldRow}>
             <View style={styles.field}>
-              <Text style={styles.label}>Patient ID</Text>
+              <Text style={styles.label}>Expecting Mother ID</Text>
               <TextInput
                 value={patientValue}
                 onChangeText={setPatientValue}
-                placeholder="e.g. PAT-103"
+                placeholder="e.g. MAT-103"
                 placeholderTextColor="#6B7A90"
                 autoCapitalize="characters"
                 style={styles.input}
@@ -225,44 +217,53 @@ export const ScanConnectScreen: React.FC = () => {
 
         <View style={styles.devicesCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Nearby devices</Text>
+            <Text style={styles.sectionTitle}>💓 LifeBand Devices</Text>
             <Text style={styles.sectionMeta}>
-              Tap a device to connect instantly. List refreshes while scanning.
+              Tap a device to connect and start monitoring maternal health.
             </Text>
           </View>
           <FlatList
             data={devices}
             keyExtractor={item => item.id}
             renderItem={renderDevice}
+            scrollEnabled={false}
+            style={styles.deviceList}
             ListEmptyComponent={
               <Text style={styles.empty}>
                 {isScanning
-                  ? 'Scanning... bring the LifeBand closer.'
-                  : 'No devices discovered yet. Start scanning to refresh.'}
+                  ? '🔍 Scanning... bring the LifeBand closer.'
+                  : '📱 No devices discovered yet. Start scanning to refresh.'}
               </Text>
             }
           />
         </View>
-      </View>
+      </ScrollView>
     </ScreenBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  content: {
+  container: {
     flex: 1,
+  },
+  content: {
     padding: spacing.lg,
+    paddingBottom: spacing.xl,
   },
   scanButton: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.surface,
+    backgroundColor: palette.primary,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   scanButtonLabel: {
-    color: palette.textOnDark,
-    fontWeight: '600',
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 12,
   },
   statusCard: {
     marginTop: spacing.lg,
@@ -432,10 +433,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: palette.success,
   },
+  deviceList: {
+    maxHeight: 300,
+    marginTop: spacing.sm,
+  },
   empty: {
     marginTop: spacing.lg,
     textAlign: 'center',
     color: palette.textSecondary,
+    fontSize: 14,
   },
 });
 

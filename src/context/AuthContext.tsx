@@ -12,6 +12,7 @@ export type UserRole = 'ASHA' | 'Doctor' | 'Patient';
 
 type AuthState = {
   isAuthenticated: boolean;
+  isLoading: boolean;
   role?: UserRole;
   name?: string;
   identifier?: string;
@@ -25,9 +26,10 @@ type AuthAction =
     }
   | {type: 'SET_ROLE'; payload: UserRole}
   | {type: 'RESTORE_AUTH'; payload: AuthState}
+  | {type: 'SET_LOADING'; payload: boolean}
   | {type: 'LOGOUT'};
 
-type LoginPayload = {name: string; identifier: string; email?: string};
+type LoginPayload = {name: string; identifier: string; email?: string; role?: UserRole};
 type RegisterPayload = {
   name: string;
   email: string;
@@ -37,6 +39,7 @@ type RegisterPayload = {
 
 type AuthContextValue = {
   isAuthenticated: boolean;
+  isLoading: boolean;
   role?: UserRole;
   name?: string;
   identifier?: string;
@@ -50,6 +53,7 @@ type AuthContextValue = {
 
 const initialState: AuthState = {
   isAuthenticated: false,
+  isLoading: false,
 };
 
 const reducer = (state: AuthState, action: AuthAction): AuthState => {
@@ -58,6 +62,7 @@ const reducer = (state: AuthState, action: AuthAction): AuthState => {
       return {
         ...state,
         isAuthenticated: true,
+        isLoading: false,
         name: action.payload.name,
         identifier: action.payload.identifier,
         email: action.payload.email,
@@ -69,9 +74,14 @@ const reducer = (state: AuthState, action: AuthAction): AuthState => {
         role: action.payload,
       };
     case 'RESTORE_AUTH':
-      return action.payload;
+      return {...action.payload, isLoading: false};
+    case 'SET_LOADING':
+      return {
+        ...state,
+        isLoading: action.payload,
+      };
     case 'LOGOUT':
-      return initialState;
+      return {...initialState, isLoading: false};
     default:
       return state;
   }
@@ -82,7 +92,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Load persisted auth state on app start
+  // Load persisted auth state on app start for persistent login
   useEffect(() => {
     const loadAuthState = async () => {
       try {
@@ -90,9 +100,12 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
         if (authData) {
           const parsedAuth = JSON.parse(authData);
           dispatch({type: 'RESTORE_AUTH', payload: parsedAuth});
+        } else {
+          dispatch({type: 'SET_LOADING', payload: false});
         }
       } catch (error) {
         console.log('Failed to load auth state:', error);
+        dispatch({type: 'SET_LOADING', payload: false});
       }
     };
     loadAuthState();
@@ -114,8 +127,22 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   }, [state]);
 
   const login = useCallback(
-    async ({name, identifier, email}: LoginPayload) => {
-      // Check if user already has a saved role
+    async ({name, identifier, email, role}: LoginPayload) => {
+      // If role is provided, use it directly and save it
+      if (role) {
+        try {
+          await AsyncStorage.setItem(`userRole_${identifier}`, role);
+        } catch (error) {
+          console.log('Failed to save user role:', error);
+        }
+        dispatch({
+          type: 'LOGIN', 
+          payload: {name, identifier, email, role}
+        });
+        return;
+      }
+
+      // Otherwise, check if user already has a saved role
       try {
         const savedRole = await AsyncStorage.getItem(`userRole_${identifier}`);
         dispatch({
@@ -183,6 +210,7 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   const value = useMemo<AuthContextValue>(
     () => ({
       isAuthenticated: state.isAuthenticated,
+      isLoading: state.isLoading,
       role: state.role,
       name: state.name,
       identifier: state.identifier,

@@ -1,40 +1,44 @@
 export const palette = {
-  // Warm, nurturing background colors inspired by maternal care
-  background: '#FFF8F5', // Soft cream/peach background
-  backgroundSoft: '#FFF0E8', // Lighter peach
+  // Modern, clean backgrounds with subtle warmth
+  background: '#FAFCFF', // Very light blue-white for cleanliness and trust
+  backgroundSoft: '#F5F8FC', // Subtle blue tint
   card: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceSoft: '#FBF7F4', // Very light warm tone
+  surfaceSoft: '#F8FAFC', // Clean light gray
   
-  // Primary colors - soft rose/coral for maternal warmth
-  primary: '#E57373', // Soft coral/rose - nurturing and warm
-  primaryDark: '#D25A5A', // Deeper rose
-  primaryLight: '#F8BBD9', // Light pink
+  // Primary colors - modern teal/emerald for health and growth
+  primary: '#10B981', // Modern emerald green - health, growth, vitality
+  primaryDark: '#059669', // Deeper emerald
+  primaryLight: '#A7F3D0', // Light emerald
   
   // Accent and status colors
-  accent: '#FFB74D', // Warm orange - like sunrise/hope
-  success: '#81C784', // Soft green for health/growth
-  warning: '#FFB74D', // Warm orange
-  danger: '#F06292', // Soft pink-red, less harsh than pure red
+  accent: '#F59E0B', // Warm amber for energy and optimism
+  success: '#22C55E', // Bright green for positive health outcomes
+  info: '#3B82F6', // Modern blue for informational content
+  warning: '#F59E0B', // Amber for caution
+  danger: '#EF4444', // Clear red for important alerts
   
-  // Text colors for warm theme
-  textPrimary: '#3E2723', // Warm dark brown instead of cold black
-  textSecondary: '#6D4C41', // Medium warm brown
+  // Text colors for modern readability
+  textPrimary: '#1F2937', // Modern dark gray - excellent readability
+  textSecondary: '#6B7280', // Medium gray for secondary text
   textOnDark: '#FFFFFF',
   textOnPrimary: '#FFFFFF',
-  textOnLight: '#3E2723', // For light backgrounds
+  textOnLight: '#1F2937', // For light backgrounds
   
   // Borders and shadows
-  border: '#E8D5D3', // Warm light border
-  shadow: '#3E272320', // Warm shadow
+  border: '#E5E7EB', // Clean light gray border
+  shadow: '#1F293715', // Subtle shadow
   
-  // Additional maternal care colors
+  // Additional maternal care colors - modern pastels
   maternal: {
-    blush: '#F8BBD9', // Soft blush pink
-    lavender: '#E1BEE7', // Gentle lavender
-    mint: '#B2DFDB', // Soft mint for freshness
-    peach: '#FFCCBC', // Warm peach
-    cream: '#FFF8E1', // Creamy yellow
+    blush: '#FDF2F8', // Very light pink background
+    lavender: '#F3F4F6', // Light gray-lavender
+    mint: '#ECFDF5', // Very light green
+    peach: '#FEF3E2', // Light amber background
+    cream: '#FFFBEB', // Very light yellow
+    rose: '#FCE7F3', // Light rose
+    sky: '#EFF6FF', // Light blue
+    indigo: '#EEF2FF', // Light indigo
   },
 } as const;
 

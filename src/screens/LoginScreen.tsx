@@ -1,5 +1,6 @@
 import React, {useMemo, useState, useEffect, useRef} from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -98,10 +99,34 @@ export const LoginScreen: React.FC = () => {
     // Show loading screen for a moment to demonstrate the features
     await new Promise(resolve => setTimeout(resolve, 2000));
     
+    // Determine role based on email
+    let role: 'ASHA' | 'Doctor' | 'Patient' | undefined;
+    const email = identifier.trim().toLowerCase();
+    
+    if (email === 'patient@example.com') {
+      role = 'Patient';
+    } else if (email === 'doctor@example.com') {
+      role = 'Doctor';
+    } else if (email === 'asha@example.com') {
+      role = 'ASHA';
+    }
+    
+    // Check if user has a valid role
+    if (!role) {
+      setIsLoading(false);
+      Alert.alert(
+        'Not Registered',
+        'You are not registered in our system. Please contact your administrator or use one of the example logins above.',
+        [{text: 'OK'}]
+      );
+      return;
+    }
+    
     login({
       name: fullName.trim(),
       identifier: identifier.trim(),
       email: identifier.includes('@') ? identifier.trim() : undefined,
+      role,
     });
     
     setIsLoading(false);
@@ -157,6 +182,45 @@ export const LoginScreen: React.FC = () => {
           </View>
 
           <View style={styles.formCard}>
+            <View style={styles.presetLoginsContainer}>
+              <Text style={styles.presetTitle}>Quick Login Examples</Text>
+              <TouchableOpacity 
+                style={[styles.presetButton, styles.patientButton]}
+                onPress={() => {
+                  setFullName('Sarah Johnson');
+                  setIdentifier('patient@example.com');
+                }}
+              >
+                <Text style={styles.presetIcon}>🤱</Text>
+                <Text style={styles.presetLabel}>Expecting Mother</Text>
+                <Text style={styles.presetEmail}>patient@example.com</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.presetButton, styles.doctorButton]}
+                onPress={() => {
+                  setFullName('Dr. Emily Chen');
+                  setIdentifier('doctor@example.com');
+                }}
+              >
+                <Text style={styles.presetIcon}>🩺</Text>
+                <Text style={styles.presetLabel}>Maternal Doctor</Text>
+                <Text style={styles.presetEmail}>doctor@example.com</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.presetButton, styles.ashaButton]}
+                onPress={() => {
+                  setFullName('Priya Sharma');
+                  setIdentifier('asha@example.com');
+                }}
+              >
+                <Text style={styles.presetIcon}>👩‍⚕️</Text>
+                <Text style={styles.presetLabel}>ASHA Worker</Text>
+                <Text style={styles.presetEmail}>asha@example.com</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Sign In</Text>
             </View>
@@ -448,6 +512,57 @@ const styles = StyleSheet.create({
   linkAction: {
     color: palette.primary,
     fontWeight: '700',
+  },
+  presetLoginsContainer: {
+    marginBottom: spacing.xl,
+  },
+  presetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+  presetButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    marginBottom: spacing.sm,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  patientButton: {
+    backgroundColor: palette.maternal.mint,
+    borderColor: palette.success,
+    shadowColor: palette.success,
+  },
+  doctorButton: {
+    backgroundColor: palette.maternal.blush,
+    borderColor: palette.accent,
+    shadowColor: palette.accent,
+  },
+  ashaButton: {
+    backgroundColor: palette.maternal.lavender,
+    borderColor: palette.primary,
+    shadowColor: palette.primary,
+  },
+  presetIcon: {
+    fontSize: 20,
+    marginRight: spacing.sm,
+  },
+  presetLabel: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: palette.textPrimary,
+  },
+  presetEmail: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    fontStyle: 'italic',
   },
 });
 

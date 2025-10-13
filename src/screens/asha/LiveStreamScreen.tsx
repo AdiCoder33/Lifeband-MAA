@@ -1,6 +1,7 @@
 import React, {useMemo, useState} from 'react';
 import {
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -13,7 +14,7 @@ import {
   VictoryTheme,
 } from 'victory-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import AppHeader from '../../components/AppHeader';
+
 import {useBle} from '../../features/ble/BleProvider';
 import ReadingTile from '../../components/ReadingTile';
 import {useAppStore} from '../../store/useAppStore';
@@ -60,19 +61,12 @@ export const LiveStreamScreen: React.FC = () => {
 
   return (
     <ScreenBackground>
-      <View style={styles.content}>
-        <AppHeader
-          title="Live streaming vitals"
-          subtitle="See every heartbeat, saturation, and pressure update in real time."
-          rightAccessory={
-            <TouchableOpacity
-              onPress={clearReadings}
-              style={styles.clearButton}
-              accessibilityRole="button">
-              <Text style={styles.clearButtonLabel}>Clear history</Text>
-            </TouchableOpacity>
-          }
-        />
+      <ScrollView 
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+
 
         <Text style={styles.timestamp}>
           Last update · {formatTimestamp(lastReading?.timestamp)}
@@ -80,13 +74,13 @@ export const LiveStreamScreen: React.FC = () => {
 
         <View style={styles.tilesRow}>
           <ReadingTile
-            label="Heart Rate"
+            label="Maternal Heart Rate"
             value={lastReading?.heartRate}
             unit="bpm"
             trend="steady"
           />
           <ReadingTile
-            label="SpO2"
+            label="Blood Oxygen"
             value={lastReading?.spo2}
             unit="%"
             trend="steady"
@@ -94,14 +88,14 @@ export const LiveStreamScreen: React.FC = () => {
         </View>
         <View style={styles.tilesRow}>
           <ReadingTile
-            label="HRV"
+            label="Heart Variability"
             value={lastReading?.hrv}
             unit="ms"
             trend="steady"
             variant="secondary"
           />
           <ReadingTile
-            label="Temperature"
+            label="Body Temperature"
             value={lastReading?.temperature}
             unit="°C"
             trend="steady"
@@ -110,14 +104,14 @@ export const LiveStreamScreen: React.FC = () => {
         </View>
         <View style={styles.tilesRow}>
           <ReadingTile
-            label="Systolic"
+            label="Blood Pressure (Sys)"
             value={lastReading?.systolic}
             unit="mmHg"
             trend="steady"
             variant="secondary"
           />
           <ReadingTile
-            label="Diastolic"
+            label="Blood Pressure (Dia)"
             value={lastReading?.diastolic}
             unit="mmHg"
             trend="steady"
@@ -147,7 +141,7 @@ export const LiveStreamScreen: React.FC = () => {
         </View>
 
         <View style={styles.chartCard}>
-          <Text style={styles.chartTitle}>Heart rate stream</Text>
+          <Text style={styles.chartTitle}>💗 Maternal Heart Rate Trends</Text>
           <VictoryChart
             theme={VictoryTheme.material}
             height={220}
@@ -176,15 +170,15 @@ export const LiveStreamScreen: React.FC = () => {
             <VictoryLine
               data={chartData}
               interpolation="monotoneX"
-              style={{data: {stroke: '#4C8BF5', strokeWidth: 3}}}
+              style={{data: {stroke: palette.primary, strokeWidth: 3}}}
             />
           </VictoryChart>
         </View>
 
         <View style={styles.historyHeader}>
-          <Text style={styles.historyTitle}>Recent samples</Text>
+          <Text style={styles.historyTitle}>📋 Recent Maternal Vitals</Text>
           <Text style={styles.historyMeta}>
-            {history.length ? `${history.length} readings in memory` : 'Waiting for readings'}
+            {history.length ? `${history.length} readings recorded` : 'Monitoring expecting mother...'}
           </Text>
         </View>
 
@@ -200,6 +194,8 @@ export const LiveStreamScreen: React.FC = () => {
           data={history}
           keyExtractor={item => item.timestamp}
           contentContainerStyle={styles.listContent}
+          scrollEnabled={false}
+          nestedScrollEnabled={true}
           renderItem={({item}) => (
             <View style={styles.row}>
               <Text style={[styles.rowValue, styles.rowTimestamp]}>
@@ -219,29 +215,37 @@ export const LiveStreamScreen: React.FC = () => {
           )}
           ListEmptyComponent={
             <Text style={styles.empty}>
-              Waiting for LifeBand readings to stream in…
+              🤱 Waiting for maternal vitals to begin streaming...
             </Text>
           }
         />
-      </View>
+      </ScrollView>
     </ScreenBackground>
   );
 };
 
 const styles = StyleSheet.create({
-  content: {
+  container: {
     flex: 1,
+  },
+  content: {
     padding: spacing.lg,
+    paddingBottom: spacing.xl * 2,
   },
   clearButton: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: palette.surface,
+    borderColor: palette.primary,
+    backgroundColor: palette.primary,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   clearButtonLabel: {
-    color: palette.textOnDark,
+    color: palette.textOnPrimary,
     fontWeight: '600',
   },
   timestamp: {
@@ -263,16 +267,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     borderWidth: 1,
-    borderColor: palette.surface,
+    borderColor: palette.border,
     marginHorizontal: spacing.xs,
-    backgroundColor: '#102F5A',
+    backgroundColor: palette.surface,
   },
   rangeButtonActive: {
     backgroundColor: palette.primary,
     borderColor: palette.primary,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   rangeButtonText: {
-    color: palette.textOnDark,
+    color: palette.textSecondary,
     fontWeight: '600',
   },
   rangeButtonTextActive: {

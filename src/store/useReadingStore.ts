@@ -9,6 +9,8 @@ export type StoredReading = BleReading & {
   patientId: string;
   uploaded: boolean;
   syncedAt?: string;
+  babyMovement?: number; // Baby's movement in movements/hr
+  stressLevel?: number; // Mother's stress level in percentage
 };
 
 type PatientsMap = Record<string, PatientDetail>;
