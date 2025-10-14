@@ -149,6 +149,9 @@ android/*.iml
 android/.idea/
 android/*.keystore
 android/app/debug.keystore
+android/app/lifeband-release.keystore
+# Keep gradle.properties safe - it contains keystore passwords
+# android/gradle.properties
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots
