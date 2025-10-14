@@ -3,7 +3,8 @@ import {View, Text} from 'react-native';
 import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
-import {useAuth, type UserRole} from '../context/AuthContext';
+import {useAuth} from '../context/AuthContext';
+import {UserRole} from '../types/models';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 
@@ -19,7 +20,17 @@ import {palette} from '../theme';
 
 export type RootStackParamList = {
   Login: undefined;
-  Register: undefined;
+  Register: {
+    googleUserInfo?: {
+      email: string;
+      name: string;
+      photo?: string;
+      idToken?: string;
+    };
+    isGoogleSignUp?: boolean;
+    existingUserData?: any;
+    missingFields?: string[];
+  } | undefined;
   Main: undefined;
   Profile: undefined;
 };
@@ -101,28 +112,46 @@ const PatientNavigator = () => {
 };
 
 const roleToComponent: Record<UserRole, React.FC> = {
-  ASHA: CustomAshaDrawer,
-  Doctor: CustomDoctorDrawer,
-  Patient: PatientNavigator,
+  asha: CustomAshaDrawer,
+  doctor: CustomDoctorDrawer,
+  patient: PatientNavigator,
+};
+
+// Convert legacy role format to new format
+const convertRole = (legacyRole: string): UserRole => {
+  switch (legacyRole) {
+    case 'ASHA':
+      return 'asha';
+    case 'Doctor':
+      return 'doctor';
+    case 'Patient':
+      return 'patient';
+    default:
+      return 'patient'; // Default fallback
+  }
 };
 
 const MainSwitch: React.FC = () => {
-  const {role} = useAuth();
+  const {role, logout} = useAuth();
   
   if (!role) {
-    // Return a loading component instead of null to prevent blank screen
+    // If authenticated but no role, there's an issue - logout and redirect to login
+    console.log('MainSwitch: User is authenticated but has no role - forcing logout');
+    logout();
     return (
       <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: palette.background}}>
-        <Text style={{color: palette.textPrimary, fontSize: 16}}>Loading your dashboard...</Text>
+        <Text style={{color: palette.textPrimary, fontSize: 16}}>Redirecting to login...</Text>
       </View>
     );
   }
-  const Component = roleToComponent[role];
+  
+  const normalizedRole = convertRole(role);
+  const Component = roleToComponent[normalizedRole];
   return <Component />;
 };
 
 export const AppNavigator: React.FC = () => {
-  const {isAuthenticated, role} = useAuth();
+  const {isAuthenticated, role, isLoading} = useAuth();
   const navigationTheme = useMemo(
     () => ({
       ...DefaultTheme,
@@ -138,6 +167,17 @@ export const AppNavigator: React.FC = () => {
     }),
     [],
   );
+
+  // Show loading screen while authentication is being determined
+  if (isLoading) {
+    return (
+      <View style={{flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: palette.background}}>
+        <Text style={{color: palette.textPrimary, fontSize: 16}}>Checking authentication...</Text>
+      </View>
+    );
+  }
+
+  console.log('AppNavigator - isAuthenticated:', isAuthenticated, 'role:', role, 'isLoading:', isLoading);
 
   return (
     <NavigationContainer theme={navigationTheme}>

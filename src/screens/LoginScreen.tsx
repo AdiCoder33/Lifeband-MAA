@@ -19,18 +19,27 @@ import {useAuth} from '../context/AuthContext';
 import {palette, radii, spacing} from '../theme';
 import type {RootStackParamList} from '../navigation/AppNavigator';
 
+
 type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
-  const {login, loginWithGoogle} = useAuth();
-  const [fullName, setFullName] = useState('');
-  const [identifier, setIdentifier] = useState('');
+  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated} = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   
   // Animation values
   const heartAnimation = useRef(new Animated.Value(1)).current;
   const connectionAnimation = useRef(new Animated.Value(0)).current;
+
+  // Force logout any existing session when component mounts (for fresh login)
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('LoginScreen: Clearing previous authentication to allow fresh login');
+      logout();
+    }
+  }, []);
 
   // Start animations on component mount
   useEffect(() => {
@@ -85,8 +94,8 @@ export const LoginScreen: React.FC = () => {
   }, [heartAnimation, connectionAnimation]);
 
   const isDisabled = useMemo(
-    () => !fullName.trim() || !identifier.trim() || isLoading,
-    [fullName, identifier, isLoading],
+    () => !email.trim() || !password.trim() || isLoading,
+    [email, password, isLoading],
   );
 
   const handleSubmit = async () => {
@@ -96,48 +105,97 @@ export const LoginScreen: React.FC = () => {
     
     setIsLoading(true);
     
-    // Show loading screen for a moment to demonstrate the features
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // Determine role based on email
-    let role: 'ASHA' | 'Doctor' | 'Patient' | undefined;
-    const email = identifier.trim().toLowerCase();
-    
-    if (email === 'patient@example.com') {
-      role = 'Patient';
-    } else if (email === 'doctor@example.com') {
-      role = 'Doctor';
-    } else if (email === 'asha@example.com') {
-      role = 'ASHA';
+    try {
+      // Use Firebase authentication
+      await signInWithFirebase(email.trim(), password.trim());
+      // signInWithFirebase handles navigation and role setting
+    } catch (error: any) {
+      let errorMessage = 'Failed to sign in. Please check your credentials and try again.';
+      
+      if (error.message) {
+        if (error.message.includes('user-not-found')) {
+          errorMessage = 'No account found with this email address. Please sign up first.';
+        } else if (error.message.includes('wrong-password')) {
+          errorMessage = 'Incorrect password. Please try again.';
+        } else if (error.message.includes('invalid-email')) {
+          errorMessage = 'Please enter a valid email address.';
+        } else if (error.message.includes('too-many-requests')) {
+          errorMessage = 'Too many failed attempts. Please try again later.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      Alert.alert('Login Failed', errorMessage, [{text: 'OK'}]);
     }
-    
-    // Check if user has a valid role
-    if (!role) {
-      setIsLoading(false);
-      Alert.alert(
-        'Not Registered',
-        'You are not registered in our system. Please contact your administrator or use one of the example logins above.',
-        [{text: 'OK'}]
-      );
-      return;
-    }
-    
-    login({
-      name: fullName.trim(),
-      identifier: identifier.trim(),
-      email: identifier.includes('@') ? identifier.trim() : undefined,
-      role,
-    });
     
     setIsLoading(false);
   };
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    loginWithGoogle();
+    
+    try {
+      await loginWithGoogle();
+      // The auth context will handle the authentication flow
+      // If user needs registration, they'll be redirected automatically
+    } catch (error: any) {
+      console.error('Google Login Error:', error);
+      let errorMessage = 'Failed to sign in with Google';
+      
+      if (error.message?.includes('cancelled')) {
+        errorMessage = 'Google sign-in was cancelled';
+      } else if (error.message?.includes('Play Services')) {
+        errorMessage = 'Google Play Services not available';
+      } else if (error.message?.includes('progress')) {
+        errorMessage = 'Sign-in already in progress';
+      }
+      
+      Alert.alert('Sign-In Error', errorMessage, [{text: 'OK'}]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const createTestAccounts = async () => {
+    setIsLoading(true);
+    const testAccounts = [
+      { email: 'patient@example.com', password: 'password123', role: 'patient', name: 'Sarah Johnson' },
+      { email: 'doctor@example.com', password: 'password123', role: 'doctor', name: 'Dr. Emily Chen' },
+      { email: 'asha@example.com', password: 'password123', role: 'asha', name: 'Priya Sharma' }
+    ];
+
+    try {
+      for (const account of testAccounts) {
+        try {
+          await signUpWithFirebase(account.email, account.password, {
+            name: account.name,
+            role: account.role as any,
+            phone: '1234567890',
+          });
+        } catch (error: any) {
+          // Account might already exist, that's fine
+          if (!error.message.includes('already in use')) {
+            throw error;
+          }
+        }
+      }
+      Alert.alert(
+        'Test Accounts Created',
+        'Demo accounts have been created successfully! You can now use the preset buttons to login.',
+        [{text: 'OK'}]
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Setup Error',
+        error.message || 'Failed to create test accounts. Please try again.',
+        [{text: 'OK'}]
+      );
+    }
     setIsLoading(false);
   };
+
+
 
   return (
     <>
@@ -182,84 +240,33 @@ export const LoginScreen: React.FC = () => {
           </View>
 
           <View style={styles.formCard}>
-            <View style={styles.presetLoginsContainer}>
-              <Text style={styles.presetTitle}>Quick Login Examples</Text>
-              <TouchableOpacity 
-                style={[styles.presetButton, styles.patientButton]}
-                onPress={() => {
-                  setFullName('Sarah Johnson');
-                  setIdentifier('patient@example.com');
-                }}
-              >
-                <Text style={styles.presetIcon}>🤱</Text>
-                <Text style={styles.presetLabel}>Expecting Mother</Text>
-                <Text style={styles.presetEmail}>patient@example.com</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.presetButton, styles.doctorButton]}
-                onPress={() => {
-                  setFullName('Dr. Emily Chen');
-                  setIdentifier('doctor@example.com');
-                }}
-              >
-                <Text style={styles.presetIcon}>🩺</Text>
-                <Text style={styles.presetLabel}>Maternal Doctor</Text>
-                <Text style={styles.presetEmail}>doctor@example.com</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.presetButton, styles.ashaButton]}
-                onPress={() => {
-                  setFullName('Priya Sharma');
-                  setIdentifier('asha@example.com');
-                }}
-              >
-                <Text style={styles.presetIcon}>👩‍⚕️</Text>
-                <Text style={styles.presetLabel}>ASHA Worker</Text>
-                <Text style={styles.presetEmail}>asha@example.com</Text>
-              </TouchableOpacity>
-            </View>
-
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Sign In</Text>
             </View>
 
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={handleGoogleLogin}
-              disabled={isLoading}
-              accessibilityRole="button">
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleLabel}>Sign in with Google</Text>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerLabel}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
             <View style={styles.field}>
-              <Text style={styles.label}>Full name</Text>
+              <Text style={styles.label}>Email Address</Text>
               <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="e.g. Dr. Priya Sharma"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email address"
                 placeholderTextColor="#6B7A90"
-                autoCapitalize="words"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
                 style={styles.input}
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Email or Staff ID</Text>
+              <Text style={styles.label}>Password</Text>
               <TextInput
-                value={identifier}
-                onChangeText={setIdentifier}
-                placeholder="e.g. priya@clinic.org or ASHA-034"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
                 placeholderTextColor="#6B7A90"
                 autoCapitalize="none"
                 autoCorrect={false}
+                secureTextEntry
                 style={styles.input}
               />
             </View>
@@ -272,6 +279,21 @@ export const LoginScreen: React.FC = () => {
               <Text style={styles.primaryButtonLabel}>
                 {isLoading ? 'Preparing your care...' : 'Continue'}
               </Text>
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerLabel}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleLogin}
+              disabled={isLoading}
+              accessibilityRole="button">
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleLabel}>Sign in with Google</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -523,47 +545,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: spacing.md,
   },
-  presetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-  patientButton: {
-    backgroundColor: palette.maternal.mint,
-    borderColor: palette.success,
-    shadowColor: palette.success,
-  },
-  doctorButton: {
-    backgroundColor: palette.maternal.blush,
-    borderColor: palette.accent,
-    shadowColor: palette.accent,
-  },
-  ashaButton: {
-    backgroundColor: palette.maternal.lavender,
-    borderColor: palette.primary,
-    shadowColor: palette.primary,
-  },
-  presetIcon: {
-    fontSize: 20,
-    marginRight: spacing.sm,
-  },
-  presetLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  presetEmail: {
-    fontSize: 12,
-    color: palette.textSecondary,
-    fontStyle: 'italic',
-  },
+
 });
 
 export default LoginScreen;

@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "280198393441",
+    "project_id": "lifeband-maa",
+    "storage_bucket": "lifeband-maa.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:280198393441:android:79721949b2f9a0bc258420",
+        "android_client_info": {
+          "package_name": "com.lifebandmaa"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "280198393441-c165pmhpdk3h7irbtei0ljcegpgf1grj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lifebandmaa",
+            "certificate_hash": "5dd570a3f5f5f4e78fa4aecd0d157fe9f482c9df"
+          }
+        },
+        {
+          "client_id": "280198393441-u1i6o8h56l7gucep2vjp8180j5vo90qk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCsfokUXPPeZjiQMckrWjQs--uqm6FNXMA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "280198393441-u1i6o8h56l7gucep2vjp8180j5vo90qk.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "280198393441-6fcl7j7sgcmfcu8rbdbk8ddlhmmq6lkp.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "org.reactjs.native.example.HelloWorld"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,5 @@
 export type RiskLevel = 'LOW' | 'MODERATE' | 'HIGH';
+export type UserRole = 'patient' | 'doctor' | 'asha';
 
 export interface PatientSummary {
   id: string;
