@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import GoogleAuthService from '../services/firebase/googleAuth';
 import UserProfileService from '../services/firebase/UserProfileService';
-import GoogleAccountService from '../services/firebase/GoogleAccountService';
 import {useNavigation, useRoute, RouteProp} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import ScreenBackground from '../components/ScreenBackground';

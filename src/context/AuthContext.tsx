@@ -252,6 +252,24 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
     }
   }, [state]);
 
+  // Helpers for per-Google-account role persistence
+  const getRoleForGoogleEmail = async (email: string): Promise<LegacyUserRole | null> => {
+    try {
+      const v = await AsyncStorage.getItem(`googleRole_${email}`);
+      return v as LegacyUserRole | null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  const setRoleForGoogleEmail = async (email: string, role: LegacyUserRole) => {
+    try {
+      await AsyncStorage.setItem(`googleRole_${email}`, role);
+    } catch (e) {
+      console.log('Failed to set google role', e);
+    }
+  };
+
   const login = useCallback(
     async ({name, identifier, email, role}: LoginPayload) => {
       // If role is provided, use it directly and save it
@@ -304,28 +322,38 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
   const loginWithGoogle = useCallback(async () => {
     try {
       dispatch({type: 'SET_LOADING', payload: true});
-      
-      const result: GoogleSignInResult = await GoogleAuthService.signIn();
-      
+
+  const result: GoogleSignInResult = await GoogleAuthService.signIn({ forceAccountSelection: true });
+
+      // If we have an account email, try to load a stored role for it
+      const accountEmail = result.accountEmail || result.googleUserInfo?.email || result.user?.email;
+      if (accountEmail) {
+        const storedRole = await getRoleForGoogleEmail(accountEmail);
+        if (storedRole && result.existingProfile) {
+          // Apply stored role and login
+          dispatch({
+            type: 'GOOGLE_LOGIN',
+            payload: { user: result.user, profile: result.existingProfile }
+          });
+          dispatch({ type: 'SET_ROLE', payload: storedRole });
+          dispatch({type: 'SET_LOADING', payload: false});
+          return;
+        }
+      }
+
       if (result.isNewUser) {
-        // User needs to complete registration
+        // Ask user to complete registration
         dispatch({
           type: 'GOOGLE_NEEDS_REGISTRATION',
-          payload: {
-            user: result.user,
-            googleUserInfo: result.googleUserInfo
-          }
+          payload: { user: result.user, googleUserInfo: result.googleUserInfo }
         });
       } else if (result.existingProfile) {
-        // User already exists, log them in
         dispatch({
           type: 'GOOGLE_LOGIN',
-          payload: {
-            user: result.user,
-            profile: result.existingProfile
-          }
+          payload: { user: result.user, profile: result.existingProfile }
         });
       }
+      dispatch({type: 'SET_LOADING', payload: false});
     } catch (error) {
       console.error('Google Sign-In Error:', error);
       dispatch({type: 'SET_LOADING', payload: false});
@@ -356,6 +384,16 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
           profile: profile
         }
       });
+      // Persist the chosen role for this Google account email
+      const email = state.googleUser.email;
+      if (email && userInfo.role) {
+        // convert role (firebase role is 'patient' | 'doctor' | 'asha') to Legacy names
+        const legacyRole = convertToLegacyRole(userInfo.role as UserRole);
+        if (legacyRole) {
+          await setRoleForGoogleEmail(email, legacyRole);
+          dispatch({ type: 'SET_ROLE', payload: legacyRole });
+        }
+      }
     } catch (error) {
       console.error('Complete Google Registration Error:', error);
       dispatch({type: 'SET_LOADING', payload: false});

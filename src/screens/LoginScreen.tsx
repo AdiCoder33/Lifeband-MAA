@@ -24,10 +24,10 @@ type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
-  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated} = useAuth();
+  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingLocal, setIsLoadingLocal] = useState(false);
   
   // Animation values
   const heartAnimation = useRef(new Animated.Value(1)).current;
@@ -94,8 +94,8 @@ export const LoginScreen: React.FC = () => {
   }, [heartAnimation, connectionAnimation]);
 
   const isDisabled = useMemo(
-    () => !email.trim() || !password.trim() || isLoading,
-    [email, password, isLoading],
+    () => !email.trim() || !password.trim() || isLoadingLocal || authLoading,
+    [email, password, isLoadingLocal, authLoading],
   );
 
   const handleSubmit = async () => {
@@ -103,7 +103,7 @@ export const LoginScreen: React.FC = () => {
       return;
     }
     
-    setIsLoading(true);
+  setIsLoadingLocal(true);
     
     try {
       // Use Firebase authentication
@@ -129,11 +129,11 @@ export const LoginScreen: React.FC = () => {
       Alert.alert('Login Failed', errorMessage, [{text: 'OK'}]);
     }
     
-    setIsLoading(false);
+  setIsLoadingLocal(false);
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
+  setIsLoadingLocal(true);
     
     try {
       await loginWithGoogle();
@@ -153,7 +153,7 @@ export const LoginScreen: React.FC = () => {
       
       Alert.alert('Sign-In Error', errorMessage, [{text: 'OK'}]);
     } finally {
-      setIsLoading(false);
+      setIsLoadingLocal(false);
     }
   };
 
@@ -277,7 +277,7 @@ export const LoginScreen: React.FC = () => {
               disabled={isDisabled}
               style={[styles.primaryButton, isDisabled && styles.buttonDisabled]}>
               <Text style={styles.primaryButtonLabel}>
-                {isLoading ? 'Preparing your care...' : 'Continue'}
+                {(isLoadingLocal || authLoading) ? 'Preparing your care...' : 'Continue'}
               </Text>
             </TouchableOpacity>
 
@@ -290,7 +290,7 @@ export const LoginScreen: React.FC = () => {
             <TouchableOpacity
               style={styles.googleButton}
               onPress={handleGoogleLogin}
-              disabled={isLoading}
+              disabled={isLoadingLocal || authLoading}
               accessibilityRole="button">
               <Text style={styles.googleIcon}>G</Text>
               <Text style={styles.googleLabel}>Sign in with Google</Text>
@@ -307,10 +307,10 @@ export const LoginScreen: React.FC = () => {
       </KeyboardAvoidingView>
     </ScreenBackground>
     
-    <LoadingScreen 
-      visible={isLoading} 
-      message={isLoading ? "Setting up your maternal care dashboard..." : undefined} 
-    />
+      <LoadingScreen
+        visible={isLoadingLocal || authLoading}
+        message={(isLoadingLocal || authLoading) ? "Setting up your maternal care dashboard..." : undefined}
+      />
   </>
   );
 };

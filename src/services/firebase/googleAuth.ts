@@ -6,6 +6,7 @@ import UserProfileService, { UserProfile } from './UserProfileService';
 export interface GoogleSignInResult {
   user: FirebaseAuthTypes.User;
   googleUserInfo: any;
+  accountEmail?: string;
   isNewUser: boolean;
   existingProfile?: UserProfile;
 }
@@ -23,15 +24,41 @@ class GoogleAuthService {
     }
   }
 
-  static async signIn(): Promise<GoogleSignInResult> {
+  static async signIn(options?: {forceAccountSelection?: boolean}): Promise<GoogleSignInResult> {
     try {
       this.configure();
       
       // Check if device supports Google Play
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
       
-      // Get user info from Google
-      const userInfo = await GoogleSignin.signIn();
+      // If caller requests forcing account selection, revoke access and sign out so picker appears
+      if (options?.forceAccountSelection) {
+        console.debug('[GoogleAuthService] Forcing account selection: revoking access and signing out');
+        try {
+          // revokeAccess clears the OAuth grant and forces the account chooser next time
+          await GoogleSignin.revokeAccess();
+          console.debug('[GoogleAuthService] revokeAccess() succeeded');
+        } catch (e) {
+          console.warn('[GoogleAuthService] revokeAccess() failed', e);
+        }
+        try {
+          await GoogleSignin.signOut();
+          console.debug('[GoogleAuthService] GoogleSignin.signOut() succeeded');
+        } catch (e) {
+          console.warn('[GoogleAuthService] GoogleSignin.signOut() failed', e);
+        }
+        try {
+          await auth().signOut();
+          console.debug('[GoogleAuthService] Firebase auth().signOut() succeeded');
+        } catch (e) {
+          console.warn('[GoogleAuthService] Firebase signOut() failed', e);
+        }
+      }
+      
+  // Get user info from Google (this will show account picker)
+  console.debug('[GoogleAuthService] Calling GoogleSignin.signIn()');
+  const userInfo = await GoogleSignin.signIn();
+  console.debug('[GoogleAuthService] GoogleSignin.signIn() returned:', userInfo);
       
       // Create a Google credential with the token
       const idToken = userInfo.data?.idToken;
@@ -41,8 +68,9 @@ class GoogleAuthService {
       
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
       
-      // Sign in to Firebase with the Google credential
+  // Sign in to Firebase with the Google credential
       const userCredential = await auth().signInWithCredential(googleCredential);
+  console.debug('[GoogleAuthService] Firebase signInWithCredential uid=', userCredential.user.uid);
       
       // Check if this user already has a profile in our system
       const existingProfile = await UserProfileService.getUserProfile(userCredential.user.uid);
@@ -52,12 +80,14 @@ class GoogleAuthService {
       if (!existingProfile && userCredential.user.email) {
         profileByEmail = await UserProfileService.checkUserByEmail(userCredential.user.email);
       }
+      console.debug('[GoogleAuthService] existingProfile:', existingProfile, 'profileByEmail:', profileByEmail);
       
       const isNewUser = !existingProfile && !profileByEmail;
       
       return {
         user: userCredential.user,
         googleUserInfo: userInfo.data?.user,
+  accountEmail: (userInfo as any)?.user?.email || userInfo.data?.user?.email || userCredential.user.email,
         isNewUser,
         existingProfile: existingProfile || profileByEmail || undefined
       };
@@ -112,6 +142,17 @@ class GoogleAuthService {
       await auth().signOut();
     } catch (error) {
       console.error('Google Sign-Out Error:', error);
+    }
+  }
+
+  static async signOutAll() {
+    try {
+      // Revoke access then sign out to allow account picker next time
+      await GoogleSignin.revokeAccess();
+      await GoogleSignin.signOut();
+      await auth().signOut();
+    } catch (error) {
+      console.error('Google signOutAll Error:', error);
     }
   }
 
