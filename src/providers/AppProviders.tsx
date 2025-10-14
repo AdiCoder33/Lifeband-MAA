@@ -1,5 +1,6 @@
 import React, {useCallback, useEffect} from 'react';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {SafeAreaProvider} from 'react-native-safe-area-context';
 import {AuthProvider} from '../context/AuthContext';
 import {BleProvider} from '../features/ble/BleProvider';
 import {useNetworkMonitor} from '../hooks/useNetworkMonitor';
@@ -54,13 +55,15 @@ const Bootstrap: React.FC<React.PropsWithChildren> = ({children}) => {
 
 export const AppProviders: React.FC<AppProvidersProps> = ({children}) => {
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <Bootstrap>
-          <BleProvider>{children}</BleProvider>
-        </Bootstrap>
-      </QueryClientProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <Bootstrap>
+            <BleProvider>{children}</BleProvider>
+          </Bootstrap>
+        </QueryClientProvider>
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 };
 

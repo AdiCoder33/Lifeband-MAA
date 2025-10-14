@@ -1,5 +1,6 @@
-import React, {useMemo, useState} from 'react';
+import React, {useMemo, useState, useEffect, useRef} from 'react';
 import {
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -8,120 +9,264 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Animated,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import ScreenBackground from '../components/ScreenBackground';
+import LoadingScreen from '../components/LoadingScreen';
 import {useAuth} from '../context/AuthContext';
 import {palette, radii, spacing} from '../theme';
 import type {RootStackParamList} from '../navigation/AppNavigator';
 
-type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
-const insightCards = [
-  {
-    title: 'Real-time vitals',
-    copy: 'Stream heart rate, SpO2, blood pressure, and temperature in seconds.',
-  },
-  {
-    title: 'Smart escalations',
-    copy: 'AI-assisted risk triage helps doctors prioritise care decisions.',
-  },
-  {
-    title: 'Offline resilience',
-    copy: 'ASHA workers can capture vitals anywhere and sync once back online.',
-  },
-];
+type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
-  const {login, loginWithGoogle} = useAuth();
-  const [fullName, setFullName] = useState('');
-  const [identifier, setIdentifier] = useState('');
+  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading} = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoadingLocal, setIsLoadingLocal] = useState(false);
+  
+  // Animation values
+  const heartAnimation = useRef(new Animated.Value(1)).current;
+  const connectionAnimation = useRef(new Animated.Value(0)).current;
+
+  // Force logout any existing session when component mounts (for fresh login)
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('LoginScreen: Clearing previous authentication to allow fresh login');
+      logout();
+    }
+  }, []);
+
+  // Start animations on component mount
+  useEffect(() => {
+    // Heartbeat animation
+    const heartbeat = () => {
+      Animated.sequence([
+        Animated.timing(heartAnimation, {
+          toValue: 1.3,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1.2,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(heartAnimation, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        setTimeout(heartbeat, 2000); // Repeat every 2 seconds
+      });
+    };
+
+    // Connection line pulse animation
+    const connectionPulse = () => {
+      Animated.sequence([
+        Animated.timing(connectionAnimation, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+        Animated.timing(connectionAnimation, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: false,
+        }),
+      ]).start(() => {
+        setTimeout(connectionPulse, 1000);
+      });
+    };
+
+    heartbeat();
+    connectionPulse();
+  }, [heartAnimation, connectionAnimation]);
 
   const isDisabled = useMemo(
-    () => !fullName.trim() || !identifier.trim(),
-    [fullName, identifier],
+    () => !email.trim() || !password.trim() || isLoadingLocal || authLoading,
+    [email, password, isLoadingLocal, authLoading],
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (isDisabled) {
       return;
     }
-    login({
-      name: fullName.trim(),
-      identifier: identifier.trim(),
-      email: identifier.includes('@') ? identifier.trim() : undefined,
-    });
+    
+  setIsLoadingLocal(true);
+    
+    try {
+      // Use Firebase authentication
+      await signInWithFirebase(email.trim(), password.trim());
+      // signInWithFirebase handles navigation and role setting
+    } catch (error: any) {
+      let errorMessage = 'Failed to sign in. Please check your credentials and try again.';
+      
+      if (error.message) {
+        if (error.message.includes('user-not-found')) {
+          errorMessage = 'No account found with this email address. Please sign up first.';
+        } else if (error.message.includes('wrong-password')) {
+          errorMessage = 'Incorrect password. Please try again.';
+        } else if (error.message.includes('invalid-email')) {
+          errorMessage = 'Please enter a valid email address.';
+        } else if (error.message.includes('too-many-requests')) {
+          errorMessage = 'Too many failed attempts. Please try again later.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      Alert.alert('Login Failed', errorMessage, [{text: 'OK'}]);
+    }
+    
+  setIsLoadingLocal(false);
   };
 
+  const handleGoogleLogin = async () => {
+  setIsLoadingLocal(true);
+    
+    try {
+      await loginWithGoogle();
+      // The auth context will handle the authentication flow
+      // If user needs registration, they'll be redirected automatically
+    } catch (error: any) {
+      console.error('Google Login Error:', error);
+      let errorMessage = 'Failed to sign in with Google';
+      
+      if (error.message?.includes('cancelled')) {
+        errorMessage = 'Google sign-in was cancelled';
+      } else if (error.message?.includes('Play Services')) {
+        errorMessage = 'Google Play Services not available';
+      } else if (error.message?.includes('progress')) {
+        errorMessage = 'Sign-in already in progress';
+      }
+      
+      Alert.alert('Sign-In Error', errorMessage, [{text: 'OK'}]);
+    } finally {
+      setIsLoadingLocal(false);
+    }
+  };
+
+  const createTestAccounts = async () => {
+    setIsLoading(true);
+    const testAccounts = [
+      { email: 'patient@example.com', password: 'password123', role: 'patient', name: 'Sarah Johnson' },
+      { email: 'doctor@example.com', password: 'password123', role: 'doctor', name: 'Dr. Emily Chen' },
+      { email: 'asha@example.com', password: 'password123', role: 'asha', name: 'Priya Sharma' }
+    ];
+
+    try {
+      for (const account of testAccounts) {
+        try {
+          await signUpWithFirebase(account.email, account.password, {
+            name: account.name,
+            role: account.role as any,
+            phone: '1234567890',
+          });
+        } catch (error: any) {
+          // Account might already exist, that's fine
+          if (!error.message.includes('already in use')) {
+            throw error;
+          }
+        }
+      }
+      Alert.alert(
+        'Test Accounts Created',
+        'Demo accounts have been created successfully! You can now use the preset buttons to login.',
+        [{text: 'OK'}]
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Setup Error',
+        error.message || 'Failed to create test accounts. Please try again.',
+        [{text: 'OK'}]
+      );
+    }
+    setIsLoading(false);
+  };
+
+
+
   return (
-    <ScreenBackground>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          keyboardShouldPersistTaps="handled">
-          <View style={styles.hero}>
-            <Text style={styles.brandBadge}>LifeBand MAA</Text>
-            <Text style={styles.heroTitle}>
-              Connected care for every community
-            </Text>
-            <Text style={styles.heroCopy}>
-              Monitor vitals, coordinate care teams, and keep patients informed
-              with a single secure platform.
-            </Text>
-            <View style={styles.cardRow}>
-              {insightCards.map(item => (
-                <View key={item.title} style={styles.insightCard}>
-                  <Text style={styles.insightTitle}>{item.title}</Text>
-                  <Text style={styles.insightCopy}>{item.copy}</Text>
-                </View>
-              ))}
+    <>
+      <ScreenBackground>
+        <KeyboardAvoidingView
+          style={styles.flex}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <ScrollView
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled">
+          {/* Beautiful Mother & Baby Animation */}
+          <View style={styles.animationContainer}>
+            <Text style={styles.appTitle}>LifeBand MAA</Text>
+            <View style={styles.motherBabyAnimation}>
+              <View style={styles.motherContainer}>
+                <Text style={styles.motherIcon}>🤰</Text>
+                <Text style={styles.motherLabel}>You</Text>
+              </View>
+              <View style={styles.connectionContainer}>
+                <Animated.View style={[styles.connectionLine, {
+                  backgroundColor: connectionAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#E57373', '#F48FB1']
+                  })
+                }]} />
+                <Animated.Text style={[styles.heartIcon, {
+                  transform: [{ scale: heartAnimation }]
+                }]}>💓</Animated.Text>
+                <Animated.View style={[styles.connectionLine, {
+                  backgroundColor: connectionAnimation.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['#E57373', '#F48FB1']
+                  })
+                }]} />
+              </View>
+              <View style={styles.babyContainer}>
+                <Text style={styles.babyIcon}>👶</Text>
+                <Text style={styles.babyLabel}>Baby</Text>
+              </View>
             </View>
+            <Text style={styles.animationSubtext}>Healthy together</Text>
           </View>
 
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Sign in to continue</Text>
-            <Text style={styles.formSubtitle}>
-              Use your LifeBand credentials or sign in with Google.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.googleButton}
-              onPress={loginWithGoogle}
-              accessibilityRole="button">
-              <Text style={styles.googleIcon}>G</Text>
-              <Text style={styles.googleLabel}>Sign in with Google</Text>
-            </TouchableOpacity>
-
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerLabel}>or</Text>
-              <View style={styles.dividerLine} />
+            <View style={styles.formHeader}>
+              <Text style={styles.formTitle}>Sign In</Text>
             </View>
 
             <View style={styles.field}>
-              <Text style={styles.label}>Full name</Text>
+              <Text style={styles.label}>Email Address</Text>
               <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder="e.g. Dr. Priya Sharma"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email address"
                 placeholderTextColor="#6B7A90"
-                autoCapitalize="words"
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
                 style={styles.input}
               />
             </View>
             <View style={styles.field}>
-              <Text style={styles.label}>Email or Staff ID</Text>
+              <Text style={styles.label}>Password</Text>
               <TextInput
-                value={identifier}
-                onChangeText={setIdentifier}
-                placeholder="e.g. priya@clinic.org or ASHA-034"
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Enter your password"
                 placeholderTextColor="#6B7A90"
                 autoCapitalize="none"
                 autoCorrect={false}
+                secureTextEntry
                 style={styles.input}
               />
             </View>
@@ -131,7 +276,24 @@ export const LoginScreen: React.FC = () => {
               onPress={handleSubmit}
               disabled={isDisabled}
               style={[styles.primaryButton, isDisabled && styles.buttonDisabled]}>
-              <Text style={styles.primaryButtonLabel}>Continue</Text>
+              <Text style={styles.primaryButtonLabel}>
+                {(isLoadingLocal || authLoading) ? 'Preparing your care...' : 'Continue'}
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerLabel}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleLogin}
+              disabled={isLoadingLocal || authLoading}
+              accessibilityRole="button">
+              <Text style={styles.googleIcon}>G</Text>
+              <Text style={styles.googleLabel}>Sign in with Google</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -144,6 +306,12 @@ export const LoginScreen: React.FC = () => {
         </ScrollView>
       </KeyboardAvoidingView>
     </ScreenBackground>
+    
+      <LoadingScreen
+        visible={isLoadingLocal || authLoading}
+        message={(isLoadingLocal || authLoading) ? "Setting up your maternal care dashboard..." : undefined}
+      />
+  </>
   );
 };
 
@@ -152,33 +320,73 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    padding: spacing.lg,
-  },
-  hero: {
-    marginTop: spacing.md,
-    marginBottom: spacing.xl,
-  },
-  brandBadge: {
-    alignSelf: 'flex-start',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    backgroundColor: '#102F5F',
-    color: palette.primaryLight,
-    fontWeight: '700',
+    paddingVertical: spacing.lg,
   },
-  heroTitle: {
-    marginTop: spacing.md,
+  // Simple Animation Styles
+  animationContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  appTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: palette.primary,
+    marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  motherBabyAnimation: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+  },
+  motherContainer: {
+    alignItems: 'center',
+  },
+  motherIcon: {
     fontSize: 32,
-    lineHeight: 40,
-    fontWeight: '700',
-    color: palette.textOnDark,
+    marginBottom: spacing.xs,
   },
-  heroCopy: {
-    marginTop: spacing.sm,
+  motherLabel: {
+    fontSize: 10,
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  connectionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.md,
+  },
+  connectionLine: {
+    width: 20,
+    height: 2,
+    backgroundColor: palette.primary,
+    borderRadius: 1,
+  },
+  heartIcon: {
     fontSize: 16,
-    lineHeight: 22,
-    color: '#9CB3DC',
+    marginHorizontal: spacing.xs,
+  },
+  babyContainer: {
+    alignItems: 'center',
+  },
+  babyIcon: {
+    fontSize: 32,
+    marginBottom: spacing.xs,
+  },
+  babyLabel: {
+    fontSize: 10,
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  animationSubtext: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    fontStyle: 'italic',
+    marginTop: spacing.sm,
   },
   cardRow: {
     marginTop: spacing.lg,
@@ -187,23 +395,36 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: '#102C56',
+    backgroundColor: palette.surface,
     borderWidth: 1,
-    borderColor: '#1D3F70',
+    borderColor: palette.border,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  insightIcon: {
+    fontSize: 24,
+    marginRight: spacing.sm,
   },
   insightTitle: {
     fontWeight: '700',
-    color: palette.textOnDark,
-    marginBottom: spacing.xs,
+    color: palette.textPrimary,
+    flex: 1,
   },
   insightCopy: {
-    color: '#9CB3DC',
+    color: palette.textSecondary,
     fontSize: 13,
     lineHeight: 18,
   },
   formCard: {
-    padding: spacing.xl,
-    borderRadius: 28,
+    padding: spacing.lg,
+    borderRadius: 24,
     backgroundColor: palette.surface,
     shadowColor: palette.shadow,
     shadowOpacity: 0.18,
@@ -211,13 +432,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   formTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: palette.textPrimary,
   },
   formSubtitle: {
     marginTop: spacing.xs,
-    fontSize: 13,
+    fontSize: 12,
+    lineHeight: 16,
     color: palette.textSecondary,
   },
   googleButton: {
@@ -257,6 +479,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1,
   },
+  formHeader: {
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
   field: {
     marginBottom: spacing.md,
   },
@@ -288,7 +514,8 @@ const styles = StyleSheet.create({
     elevation: 6,
   },
   buttonDisabled: {
-    backgroundColor: '#A7C4FB',
+    backgroundColor: palette.maternal.blush,
+    opacity: 0.7,
   },
   primaryButtonLabel: {
     color: palette.textOnPrimary,
@@ -308,6 +535,17 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontWeight: '700',
   },
+  presetLoginsContainer: {
+    marginBottom: spacing.xl,
+  },
+  presetTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.md,
+  },
+
 });
 
 export default LoginScreen;

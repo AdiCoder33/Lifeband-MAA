@@ -1,4 +1,5 @@
 export type RiskLevel = 'LOW' | 'MODERATE' | 'HIGH';
+export type UserRole = 'patient' | 'doctor' | 'asha';
 
 export interface PatientSummary {
   id: string;
@@ -27,6 +28,8 @@ export interface ReadingPayload {
   timestamp: string;
   uploaded: boolean;
   syncedAt?: string | null;
+  babyMovement?: number; // Baby's movement in movements/hr
+  stressLevel?: number; // Mother's stress level in percentage
 }
 
 export interface RiskFeedItem {

@@ -157,3 +157,6 @@ android/app/debug.keystore
 **/Pods/
 /vendor/bundle/
 .metro-health-check*
+
+# Android clean build directory (contains very long paths)
+android_clean/

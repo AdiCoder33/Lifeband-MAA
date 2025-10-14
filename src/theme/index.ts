@@ -1,4 +1,5 @@
 import {palette} from './colors';
+import {responsiveFontSize, responsiveSpacing} from './responsive';
 
 export const spacing = {
   xs: 4,
@@ -9,9 +10,11 @@ export const spacing = {
 } as const;
 
 export const radii = {
-  sm: 8,
-  md: 12,
-  lg: 18,
+  xs: 6,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
   pill: 999,
 } as const;
 
@@ -31,4 +34,4 @@ export const theme = {
 export type Theme = typeof theme;
 
 export default theme;
-export {palette};
+export {palette, responsiveFontSize, responsiveSpacing};

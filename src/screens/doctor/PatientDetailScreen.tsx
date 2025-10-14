@@ -15,7 +15,7 @@ import {
   VictoryTheme,
 } from 'victory-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import AppHeader from '../../components/AppHeader';
+
 import ReadingTile from '../../components/ReadingTile';
 import {DoctorStackParamList} from '../../navigation/DoctorNavigator';
 import {usePatientDetailQuery} from '../../features/patients/queries';
@@ -23,6 +23,7 @@ import {
   useSyncPatientDetail,
   useSyncPatientsList,
 } from '../../features/patients/usePatientsSync';
+import { ReadingPayload } from '../../features/patients/types'; // Update the path to the correct module
 import {usePatientReadings} from '../../hooks/usePatientReadings';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore} from '../../store/useReadingStore';
@@ -42,7 +43,7 @@ export const PatientDetailScreen: React.FC = () => {
     useRoute<RouteProp<DoctorStackParamList, 'PatientDetail'>>();
   const [range, setRange] = useState(ranges[0]);
   const {data, isFetching} = usePatientDetailQuery(params.patientId);
-  useSyncPatientDetail(data, data?.readings);
+  useSyncPatientDetail(data, data?.readings as ReadingPayload[] | undefined);
   useSyncPatientsList(data ? [data] : undefined);
   const storedPatient = useReadingStore(
     state => (params.patientId ? state.patients[params.patientId] : undefined),
@@ -105,10 +106,7 @@ export const PatientDetailScreen: React.FC = () => {
   return (
     <ScreenBackground>
       <ScrollView contentContainerStyle={styles.content}>
-        <AppHeader
-          title={patientName}
-          subtitle="Dive into vitals, demo charts, and care insights tailored to this patient."
-        />
+
 
         <View style={styles.topCard}>
           <View style={styles.topLeft}>
