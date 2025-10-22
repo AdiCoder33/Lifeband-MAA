@@ -119,14 +119,23 @@ class GoogleAuthService {
         throw new Error('User email is required');
       }
 
-      const profileData = {
+      // Only include fields that have actual values (no undefined)
+      const profileData: any = {
         email: user.email,
         name: additionalInfo.name || user.displayName || 'Google User',
         role: additionalInfo.role,
-        phoneNumber: additionalInfo.phoneNumber,
-        organisation: additionalInfo.organisation,
-        staffId: additionalInfo.staffId,
       };
+
+      // Add optional fields only if they have values
+      if (additionalInfo.phoneNumber) {
+        profileData.phoneNumber = additionalInfo.phoneNumber;
+      }
+      if (additionalInfo.organisation) {
+        profileData.organisation = additionalInfo.organisation;
+      }
+      if (additionalInfo.staffId) {
+        profileData.staffId = additionalInfo.staffId;
+      }
 
       const userProfile = await UserProfileService.createUserProfile(profileData);
       return userProfile;

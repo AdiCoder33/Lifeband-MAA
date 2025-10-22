@@ -1,4 +1,4 @@
-import React, {useMemo, useState, useEffect, useRef} from 'react';
+import React, {useMemo, useState, useEffect} from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -9,7 +9,6 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Animated,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -28,10 +27,6 @@ export const LoginScreen: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoadingLocal, setIsLoadingLocal] = useState(false);
-  
-  // Animation values
-  const heartAnimation = useRef(new Animated.Value(1)).current;
-  const connectionAnimation = useRef(new Animated.Value(0)).current;
 
   // Force logout any existing session when component mounts (for fresh login)
   useEffect(() => {
@@ -40,58 +35,6 @@ export const LoginScreen: React.FC = () => {
       logout();
     }
   }, []);
-
-  // Start animations on component mount
-  useEffect(() => {
-    // Heartbeat animation
-    const heartbeat = () => {
-      Animated.sequence([
-        Animated.timing(heartAnimation, {
-          toValue: 1.3,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartAnimation, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartAnimation, {
-          toValue: 1.2,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(heartAnimation, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start(() => {
-        setTimeout(heartbeat, 2000); // Repeat every 2 seconds
-      });
-    };
-
-    // Connection line pulse animation
-    const connectionPulse = () => {
-      Animated.sequence([
-        Animated.timing(connectionAnimation, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: false,
-        }),
-        Animated.timing(connectionAnimation, {
-          toValue: 0,
-          duration: 800,
-          useNativeDriver: false,
-        }),
-      ]).start(() => {
-        setTimeout(connectionPulse, 1000);
-      });
-    };
-
-    heartbeat();
-    connectionPulse();
-  }, [heartAnimation, connectionAnimation]);
 
   const isDisabled = useMemo(
     () => !email.trim() || !password.trim() || isLoadingLocal || authLoading,
@@ -155,49 +98,7 @@ export const LoginScreen: React.FC = () => {
     } finally {
       setIsLoadingLocal(false);
     }
-  };
-
-  const createTestAccounts = async () => {
-    setIsLoading(true);
-    const testAccounts = [
-      { email: 'patient@example.com', password: 'password123', role: 'patient', name: 'Sarah Johnson' },
-      { email: 'doctor@example.com', password: 'password123', role: 'doctor', name: 'Dr. Emily Chen' },
-      { email: 'asha@example.com', password: 'password123', role: 'asha', name: 'Priya Sharma' }
-    ];
-
-    try {
-      for (const account of testAccounts) {
-        try {
-          await signUpWithFirebase(account.email, account.password, {
-            name: account.name,
-            role: account.role as any,
-            phone: '1234567890',
-          });
-        } catch (error: any) {
-          // Account might already exist, that's fine
-          if (!error.message.includes('already in use')) {
-            throw error;
-          }
-        }
-      }
-      Alert.alert(
-        'Test Accounts Created',
-        'Demo accounts have been created successfully! You can now use the preset buttons to login.',
-        [{text: 'OK'}]
-      );
-    } catch (error: any) {
-      Alert.alert(
-        'Setup Error',
-        error.message || 'Failed to create test accounts. Please try again.',
-        [{text: 'OK'}]
-      );
-    }
-    setIsLoading(false);
-  };
-
-
-
-  return (
+  };  return (
     <>
       <ScreenBackground>
         <KeyboardAvoidingView
@@ -206,42 +107,16 @@ export const LoginScreen: React.FC = () => {
           <ScrollView
             contentContainerStyle={styles.content}
             keyboardShouldPersistTaps="handled">
-          {/* Beautiful Mother & Baby Animation */}
-          <View style={styles.animationContainer}>
+          {/* Simple Header */}
+          <View style={styles.header}>
             <Text style={styles.appTitle}>LifeBand MAA</Text>
-            <View style={styles.motherBabyAnimation}>
-              <View style={styles.motherContainer}>
-                <Text style={styles.motherIcon}>🤰</Text>
-                <Text style={styles.motherLabel}>You</Text>
-              </View>
-              <View style={styles.connectionContainer}>
-                <Animated.View style={[styles.connectionLine, {
-                  backgroundColor: connectionAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['#E57373', '#F48FB1']
-                  })
-                }]} />
-                <Animated.Text style={[styles.heartIcon, {
-                  transform: [{ scale: heartAnimation }]
-                }]}>💓</Animated.Text>
-                <Animated.View style={[styles.connectionLine, {
-                  backgroundColor: connectionAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: ['#E57373', '#F48FB1']
-                  })
-                }]} />
-              </View>
-              <View style={styles.babyContainer}>
-                <Text style={styles.babyIcon}>👶</Text>
-                <Text style={styles.babyLabel}>Baby</Text>
-              </View>
-            </View>
-            <Text style={styles.animationSubtext}>Healthy together</Text>
+            <Text style={styles.appSubtitle}>Maternal & Antenatal Care</Text>
           </View>
 
           <View style={styles.formCard}>
             <View style={styles.formHeader}>
-              <Text style={styles.formTitle}>Sign In</Text>
+              <Text style={styles.formTitle}>Welcome Back</Text>
+              <Text style={styles.formSubtitle}>Sign in to continue</Text>
             </View>
 
             <View style={styles.field}>
@@ -320,176 +195,59 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xl,
   },
-  // Simple Animation Styles
-  animationContainer: {
+  // Simple Header Styles
+  header: {
     alignItems: 'center',
-    paddingVertical: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  appTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: palette.primary,
-    marginBottom: spacing.md,
-    textAlign: 'center',
-  },
-  motherBabyAnimation: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-  },
-  motherContainer: {
-    alignItems: 'center',
-  },
-  motherIcon: {
-    fontSize: 32,
-    marginBottom: spacing.xs,
-  },
-  motherLabel: {
-    fontSize: 10,
-    color: palette.textSecondary,
-    fontWeight: '600',
-  },
-  connectionContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: spacing.md,
-  },
-  connectionLine: {
-    width: 20,
-    height: 2,
-    backgroundColor: palette.primary,
-    borderRadius: 1,
-  },
-  heartIcon: {
-    fontSize: 16,
-    marginHorizontal: spacing.xs,
-  },
-  babyContainer: {
-    alignItems: 'center',
-  },
-  babyIcon: {
-    fontSize: 32,
-    marginBottom: spacing.xs,
-  },
-  babyLabel: {
-    fontSize: 10,
-    color: palette.textSecondary,
-    fontWeight: '600',
-  },
-  animationSubtext: {
-    fontSize: 12,
-    color: palette.textSecondary,
-    fontStyle: 'italic',
-    marginTop: spacing.sm,
-  },
-  cardRow: {
+    marginBottom: spacing.xl,
     marginTop: spacing.lg,
   },
-  insightCard: {
-    marginBottom: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  insightHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.xs,
-  },
-  insightIcon: {
-    fontSize: 24,
-    marginRight: spacing.sm,
-  },
-  insightTitle: {
+  appTitle: {
+    fontSize: 32,
     fontWeight: '700',
-    color: palette.textPrimary,
-    flex: 1,
+    color: palette.primary,
+    marginBottom: spacing.xs,
+    letterSpacing: -0.5,
   },
-  insightCopy: {
+  appSubtitle: {
+    fontSize: 14,
     color: palette.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
+    fontWeight: '500',
   },
   formCard: {
-    padding: spacing.lg,
+    padding: spacing.xl,
     borderRadius: 24,
     backgroundColor: palette.surface,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
   },
   formTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     color: palette.textPrimary,
+    textAlign: 'center',
   },
   formSubtitle: {
     marginTop: spacing.xs,
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 20,
     color: palette.textSecondary,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  googleIcon: {
-    marginRight: spacing.sm,
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#DB4437',
-  },
-  googleLabel: {
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: spacing.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: palette.border,
-  },
-  dividerLabel: {
-    marginHorizontal: spacing.md,
-    fontSize: 12,
-    color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    textAlign: 'center',
   },
   formHeader: {
-    marginBottom: spacing.lg,
-    textAlign: 'center',
+    marginBottom: spacing.xl,
   },
   field: {
     marginBottom: spacing.md,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: palette.textSecondary,
+    color: palette.textPrimary,
     marginBottom: spacing.xs,
   },
   input: {
@@ -497,55 +255,85 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
+    paddingVertical: spacing.md,
+    fontSize: 16,
     color: palette.textPrimary,
     backgroundColor: palette.surfaceSoft,
   },
   primaryButton: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radii.pill,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md + 2,
+    borderRadius: radii.md,
     backgroundColor: palette.primary,
     alignItems: 'center',
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: {width: 0, height: 4},
+    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: palette.maternal.blush,
-    opacity: 0.7,
+    backgroundColor: palette.primaryLight,
+    opacity: 0.6,
   },
   primaryButtonLabel: {
     color: palette.textOnPrimary,
     fontWeight: '700',
     fontSize: 16,
   },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: spacing.xl,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: palette.border,
+  },
+  dividerLabel: {
+    marginHorizontal: spacing.md,
+    fontSize: 13,
+    color: palette.textSecondary,
+    fontWeight: '500',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  googleIcon: {
+    marginRight: spacing.sm,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#DB4437',
+  },
+  googleLabel: {
+    fontWeight: '600',
+    fontSize: 15,
+    color: palette.textPrimary,
+  },
   linkRow: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   linkLabel: {
     color: palette.textSecondary,
+    fontSize: 14,
     marginRight: spacing.xs,
   },
   linkAction: {
     color: palette.primary,
     fontWeight: '700',
+    fontSize: 14,
   },
-  presetLoginsContainer: {
-    marginBottom: spacing.xl,
-  },
-  presetTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: palette.textPrimary,
-    textAlign: 'center',
-    marginBottom: spacing.md,
-  },
-
 });
 
 export default LoginScreen;

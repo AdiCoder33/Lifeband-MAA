@@ -337,21 +337,22 @@ export const RegisterScreen: React.FC = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content}>
           <View style={styles.formCard}>
-            <Text style={styles.title}>
-              {isGoogleSignUp || needsRegistration 
-                ? 'Complete Your Registration' 
-                : 'Create Your Account'}
-            </Text>
-            {(isGoogleSignUp || needsRegistration) && (
-              <Text style={styles.subtitle}>
-                Please provide additional details to complete your Google account setup.
+            <View style={styles.header}>
+              <Text style={styles.title}>
+                {isGoogleSignUp || needsRegistration 
+                  ? 'Complete Your Profile' 
+                  : 'Create Account'}
               </Text>
-            )}
+              {(isGoogleSignUp || needsRegistration) && (
+                <View style={styles.googleBadge}>
+                  <Text style={styles.googleBadgeText}>✓ Google Account</Text>
+                </View>
+              )}
+            </View>
 
-            {/* Role Selection - Always at the top */}
+            {/* Role Selection */}
             <View style={styles.field}>
               <Text style={styles.label}>Your Role *</Text>
-              <Text style={styles.roleSubtext}>Select your role to customize your dashboard</Text>
               <View style={styles.roleGrid}>
                 <TouchableOpacity
                   style={[
@@ -365,7 +366,6 @@ export const RegisterScreen: React.FC = () => {
                     styles.roleLabel,
                     selectedRole === 'patient' && styles.roleLabelSelected
                   ]}>Patient</Text>
-                  <Text style={styles.roleDescription}>Expecting mother</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -380,7 +380,6 @@ export const RegisterScreen: React.FC = () => {
                     styles.roleLabel,
                     selectedRole === 'doctor' && styles.roleLabelSelected
                   ]}>Doctor</Text>
-                  <Text style={styles.roleDescription}>Healthcare provider</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -394,26 +393,10 @@ export const RegisterScreen: React.FC = () => {
                   <Text style={[
                     styles.roleLabel,
                     selectedRole === 'asha' && styles.roleLabelSelected
-                  ]}>ASHA Worker</Text>
-                  <Text style={styles.roleDescription}>Community health worker</Text>
+                  ]}>ASHA</Text>
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Show Google info if it's Google sign up */}
-            {isGoogleSignUp && googleUserInfo && (
-              <View style={styles.googleInfo}>
-                <Text style={styles.googleInfoText}>
-                  {route.params?.existingUserData ? 'Complete Your Profile' : 'Google Sign-Up'}
-                </Text>
-                <Text style={styles.googleInfoSubtext}>
-                  {route.params?.existingUserData 
-                    ? `Account: ${googleUserInfo.email} - Please complete missing details`
-                    : `Account: ${googleUserInfo.email} - Complete registration below`
-                  }
-                </Text>
-              </View>
-            )}
 
 
 
@@ -480,69 +463,7 @@ export const RegisterScreen: React.FC = () => {
               </View>
             </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Your Role *</Text>
-              <Text style={styles.roleSubtext}>Select your role to customize your dashboard</Text>
-              <View style={styles.roleGrid}>
-                <TouchableOpacity
-                  style={[
-                    styles.roleButton,
-                    selectedRole === 'patient' && styles.roleButtonSelected
-                  ]}
-                  onPress={() => setSelectedRole('patient')}
-                >
-                  <Text style={styles.roleIcon}>🤱</Text>
-                  <Text style={[
-                    styles.roleLabel,
-                    selectedRole === 'patient' && styles.roleLabelSelected
-                  ]}>Patient</Text>
-                  <Text style={styles.roleDescription}>Expecting mother</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.roleButton,
-                    selectedRole === 'doctor' && styles.roleButtonSelected
-                  ]}
-                  onPress={() => setSelectedRole('doctor')}
-                >
-                  <Text style={styles.roleIcon}>🩺</Text>
-                  <Text style={[
-                    styles.roleLabel,
-                    selectedRole === 'doctor' && styles.roleLabelSelected
-                  ]}>Doctor</Text>
-                  <Text style={styles.roleDescription}>Healthcare provider</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.roleButton,
-                    selectedRole === 'asha' && styles.roleButtonSelected
-                  ]}
-                  onPress={() => setSelectedRole('asha')}
-                >
-                  <Text style={styles.roleIcon}>👩‍⚕️</Text>
-                  <Text style={[
-                    styles.roleLabel,
-                    selectedRole === 'asha' && styles.roleLabelSelected
-                  ]}>ASHA Worker</Text>
-                  <Text style={styles.roleDescription}>Community health worker</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             {renderRoleSpecificFields()}
-
-            {isGoogleSignUp && (
-              <View style={styles.googleInfo}>
-                <Text style={styles.googleInfoText}>
-                  ✅ Signed in with Google as {googleUserInfo?.name}
-                </Text>
-                <Text style={styles.googleInfoSubtext}>
-                  Complete your profile details below
-                </Text>
-              </View>
-            )}
 
             {!isGoogleSignUp && !needsRegistration && (
               <View style={styles.fieldRow}>
@@ -624,67 +545,88 @@ const styles = StyleSheet.create({
   },
   formCard: {
     padding: spacing.xl,
-    borderRadius: 28,
+    borderRadius: 24,
     backgroundColor: palette.surface,
     shadowColor: palette.shadow,
-    shadowOpacity: 0.18,
-    shadowRadius: 24,
-    elevation: 8,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 4,
     marginBottom: spacing.xl,
   },
+  header: {
+    marginBottom: spacing.xl,
+    alignItems: 'center',
+  },
   title: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '700',
     color: palette.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    marginTop: spacing.xs,
     fontSize: 14,
     color: palette.textSecondary,
+    textAlign: 'center',
+  },
+  googleBadge: {
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: palette.success + '15',
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.success,
+  },
+  googleBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: palette.success,
   },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    borderWidth: 1,
+    paddingVertical: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
     borderColor: palette.border,
+    backgroundColor: palette.surface,
   },
   googleIcon: {
     marginRight: spacing.sm,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '700',
     color: '#DB4437',
   },
   googleLabel: {
     fontWeight: '600',
+    fontSize: 15,
     color: palette.textPrimary,
   },
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.lg,
+    marginVertical: spacing.xl,
   },
   dividerLine: {
     flex: 1,
-    height: StyleSheet.hairlineWidth,
+    height: 1,
     backgroundColor: palette.border,
   },
   dividerLabel: {
     marginHorizontal: spacing.md,
-    fontSize: 12,
+    fontSize: 13,
     color: palette.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontWeight: '500',
   },
   field: {
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   fieldRow: {
     flexDirection: 'row',
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
   },
   fieldHalf: {
     flex: 1,
@@ -693,9 +635,9 @@ const styles = StyleSheet.create({
     marginRight: spacing.sm,
   },
   label: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
-    color: palette.textSecondary,
+    color: palette.textPrimary,
     marginBottom: spacing.xs,
   },
   input: {
@@ -703,24 +645,26 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 15,
+    paddingVertical: spacing.md,
+    fontSize: 16,
     color: palette.textPrimary,
     backgroundColor: palette.surfaceSoft,
   },
   primaryButton: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.md,
-    borderRadius: radii.pill,
-    backgroundColor: palette.primaryDark,
+    marginTop: spacing.md,
+    paddingVertical: spacing.md + 2,
+    borderRadius: radii.md,
+    backgroundColor: palette.primary,
     alignItems: 'center',
-    shadowColor: palette.shadow,
-    shadowOpacity: 0.25,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowColor: palette.primary,
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: {width: 0, height: 4},
+    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: '#A7C4FB',
+    backgroundColor: palette.primaryLight,
+    opacity: 0.6,
   },
   primaryButtonLabel: {
     color: palette.textOnPrimary,
@@ -728,93 +672,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   linkRow: {
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
     flexDirection: 'row',
     justifyContent: 'center',
+    alignItems: 'center',
   },
   linkLabel: {
     color: palette.textSecondary,
+    fontSize: 14,
     marginRight: spacing.xs,
   },
   linkAction: {
     color: palette.primary,
     fontWeight: '700',
-  },
-  sidePanel: {
-    padding: spacing.xl,
-    borderRadius: 28,
-    backgroundColor: '#0F2B50',
-    borderWidth: 1,
-    borderColor: '#1F3F70',
-  },
-  sideTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: palette.textOnDark,
-  },
-  highlightRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginTop: spacing.md,
-  },
-  bullet: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: palette.primary,
-    marginRight: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  highlightText: {
-    flex: 1,
-    color: '#9CB3DC',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  mockCard: {
-    marginTop: spacing.lg,
-    padding: spacing.lg,
-    borderRadius: radii.lg,
-    backgroundColor: '#112F5B',
-    borderWidth: 1,
-    borderColor: '#1F3F70',
-  },
-  mockCardTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: palette.textOnDark,
-  },
-  mockCardCopy: {
-    marginTop: spacing.xs,
-    color: '#9CB3DC',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  mockPills: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing.md,
-  },
-  mockPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.pill,
-    marginRight: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  mockPillText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  roleSubtext: {
-    fontSize: 13,
-    color: palette.textSecondary,
-    marginBottom: spacing.sm,
+    fontSize: 14,
   },
   roleGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     gap: spacing.sm,
   },
   roleButton: {
@@ -825,50 +699,24 @@ const styles = StyleSheet.create({
     borderColor: palette.border,
     backgroundColor: palette.surface,
     alignItems: 'center',
-    minHeight: 100,
+    minHeight: 80,
     justifyContent: 'center',
   },
   roleButtonSelected: {
     borderColor: palette.primary,
-    backgroundColor: palette.primaryLight + '20',
+    backgroundColor: palette.primary + '10',
   },
   roleIcon: {
-    fontSize: 24,
+    fontSize: 28,
     marginBottom: spacing.xs,
   },
   roleLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: palette.textPrimary,
-    marginBottom: 2,
   },
   roleLabelSelected: {
     color: palette.primary,
-  },
-  roleDescription: {
-    fontSize: 11,
-    color: palette.textSecondary,
-    textAlign: 'center',
-  },
-  googleInfo: {
-    backgroundColor: '#E8F5E8',
-    padding: spacing.md,
-    borderRadius: radii.md,
-    marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: '#4CAF50',
-  },
-  googleInfoText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2E7D2E',
-    textAlign: 'center',
-  },
-  googleInfoSubtext: {
-    fontSize: 12,
-    color: '#2E7D2E',
-    textAlign: 'center',
-    marginTop: 2,
   },
 });
 

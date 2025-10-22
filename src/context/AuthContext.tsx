@@ -323,36 +323,57 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({children}) => {
     try {
       dispatch({type: 'SET_LOADING', payload: true});
 
-  const result: GoogleSignInResult = await GoogleAuthService.signIn({ forceAccountSelection: true });
+      const result: GoogleSignInResult = await GoogleAuthService.signIn({ forceAccountSelection: true });
 
-      // If we have an account email, try to load a stored role for it
-      const accountEmail = result.accountEmail || result.googleUserInfo?.email || result.user?.email;
-      if (accountEmail) {
-        const storedRole = await getRoleForGoogleEmail(accountEmail);
-        if (storedRole && result.existingProfile) {
-          // Apply stored role and login
-          dispatch({
-            type: 'GOOGLE_LOGIN',
-            payload: { user: result.user, profile: result.existingProfile }
-          });
-          dispatch({ type: 'SET_ROLE', payload: storedRole });
-          dispatch({type: 'SET_LOADING', payload: false});
-          return;
+      // If user has existing profile, log them in
+      if (result.existingProfile) {
+        const accountEmail = result.accountEmail || result.googleUserInfo?.email || result.user?.email;
+        if (accountEmail) {
+          const storedRole = await getRoleForGoogleEmail(accountEmail);
+          if (storedRole) {
+            dispatch({ type: 'SET_ROLE', payload: storedRole });
+          }
         }
-      }
-
-      if (result.isNewUser) {
-        // Ask user to complete registration
-        dispatch({
-          type: 'GOOGLE_NEEDS_REGISTRATION',
-          payload: { user: result.user, googleUserInfo: result.googleUserInfo }
-        });
-      } else if (result.existingProfile) {
+        
         dispatch({
           type: 'GOOGLE_LOGIN',
           payload: { user: result.user, profile: result.existingProfile }
         });
+        dispatch({type: 'SET_LOADING', payload: false});
+        return;
       }
+
+      // If new user, automatically create profile with default role (patient)
+      // They can change it later in profile settings
+      if (result.isNewUser) {
+        try {
+          const defaultProfile = await GoogleAuthService.completeUserProfile(result.user, {
+            name: result.googleUserInfo?.name || result.user.displayName || 'User',
+            role: 'patient', // Default role
+            // Don't pass empty/undefined values - let the service handle defaults
+          });
+          
+          dispatch({
+            type: 'GOOGLE_LOGIN',
+            payload: { user: result.user, profile: defaultProfile }
+          });
+          
+          // Save default role
+          const email = result.user.email;
+          if (email) {
+            await setRoleForGoogleEmail(email, 'Patient');
+            dispatch({ type: 'SET_ROLE', payload: 'Patient' });
+          }
+        } catch (error) {
+          console.error('Failed to create default profile:', error);
+          // If auto-creation fails, ask for manual registration
+          dispatch({
+            type: 'GOOGLE_NEEDS_REGISTRATION',
+            payload: { user: result.user, googleUserInfo: result.googleUserInfo }
+          });
+        }
+      }
+      
       dispatch({type: 'SET_LOADING', payload: false});
     } catch (error) {
       console.error('Google Sign-In Error:', error);
