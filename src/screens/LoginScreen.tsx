@@ -9,6 +9,7 @@ import {
   TextInput,
   TouchableOpacity,
   View,
+  Modal,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
@@ -23,10 +24,12 @@ type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
-  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading} = useAuth();
+  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading, needsRegistration, completeGoogleRegistration} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoadingLocal, setIsLoadingLocal] = useState(false);
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'patient' | 'doctor' | 'asha' | null>(null);
 
   // Force logout any existing session when component mounts (for fresh login)
   useEffect(() => {
@@ -35,6 +38,13 @@ export const LoginScreen: React.FC = () => {
       logout();
     }
   }, []);
+
+  // Show role selection modal when Google sign-in requires registration
+  useEffect(() => {
+    if (needsRegistration) {
+      setShowRoleModal(true);
+    }
+  }, [needsRegistration]);
 
   const isDisabled = useMemo(
     () => !email.trim() || !password.trim() || isLoadingLocal || authLoading,
@@ -95,6 +105,26 @@ export const LoginScreen: React.FC = () => {
       }
       
       Alert.alert('Sign-In Error', errorMessage, [{text: 'OK'}]);
+    } finally {
+      setIsLoadingLocal(false);
+    }
+  };
+
+  const handleRoleSelection = async () => {
+    if (!selectedRole) {
+      Alert.alert('Please Select a Role', 'Choose your role to continue');
+      return;
+    }
+
+    setIsLoadingLocal(true);
+    try {
+      await completeGoogleRegistration({
+        role: selectedRole,
+      });
+      setShowRoleModal(false);
+      Alert.alert('Success', 'Your account has been created successfully!');
+    } catch (error: any) {
+      Alert.alert('Registration Failed', error.message || 'Failed to complete registration');
     } finally {
       setIsLoadingLocal(false);
     }
@@ -186,6 +216,90 @@ export const LoginScreen: React.FC = () => {
         visible={isLoadingLocal || authLoading}
         message={(isLoadingLocal || authLoading) ? "Setting up your maternal care dashboard..." : undefined}
       />
+
+      {/* Role Selection Modal */}
+      <Modal
+        visible={showRoleModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowRoleModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Select Your Role</Text>
+            <Text style={styles.modalSubtitle}>Choose how you'll use LifeBand MAA</Text>
+
+            <View style={styles.roleOptionsContainer}>
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  selectedRole === 'patient' && styles.roleOptionSelected
+                ]}
+                onPress={() => setSelectedRole('patient')}
+              >
+                <Text style={styles.roleIcon}>🤱</Text>
+                <Text style={[
+                  styles.roleOptionText,
+                  selectedRole === 'patient' && styles.roleOptionTextSelected
+                ]}>Patient</Text>
+                <Text style={styles.roleOptionDesc}>Expecting mother</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  selectedRole === 'doctor' && styles.roleOptionSelected
+                ]}
+                onPress={() => setSelectedRole('doctor')}
+              >
+                <Text style={styles.roleIcon}>🩺</Text>
+                <Text style={[
+                  styles.roleOptionText,
+                  selectedRole === 'doctor' && styles.roleOptionTextSelected
+                ]}>Doctor</Text>
+                <Text style={styles.roleOptionDesc}>Healthcare provider</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.roleOption,
+                  selectedRole === 'asha' && styles.roleOptionSelected
+                ]}
+                onPress={() => setSelectedRole('asha')}
+              >
+                <Text style={styles.roleIcon}>👩‍⚕️</Text>
+                <Text style={[
+                  styles.roleOptionText,
+                  selectedRole === 'asha' && styles.roleOptionTextSelected
+                ]}>ASHA</Text>
+                <Text style={styles.roleOptionDesc}>Community health worker</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.modalButton,
+                !selectedRole && styles.modalButtonDisabled
+              ]}
+              onPress={handleRoleSelection}
+              disabled={!selectedRole}
+            >
+              <Text style={styles.modalButtonText}>Continue</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.modalCancelButton}
+              onPress={() => {
+                setShowRoleModal(false);
+                setSelectedRole(null);
+                logout();
+              }}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
   </>
   );
 };
@@ -333,6 +447,96 @@ const styles = StyleSheet.create({
     color: palette.primary,
     fontWeight: '700',
     fontSize: 14,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: palette.surface,
+    borderRadius: 24,
+    padding: spacing.xl,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: palette.textSecondary,
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  roleOptionsContainer: {
+    gap: spacing.md,
+    marginBottom: spacing.xl,
+  },
+  roleOption: {
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    borderWidth: 2,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    alignItems: 'center',
+  },
+  roleOptionSelected: {
+    borderColor: palette.primary,
+    backgroundColor: palette.primary + '10',
+  },
+  roleIcon: {
+    fontSize: 32,
+    marginBottom: spacing.xs,
+  },
+  roleOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.textPrimary,
+    marginBottom: 2,
+  },
+  roleOptionTextSelected: {
+    color: palette.primary,
+  },
+  roleOptionDesc: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  modalButton: {
+    paddingVertical: spacing.md + 2,
+    borderRadius: radii.md,
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  modalButtonDisabled: {
+    backgroundColor: palette.primaryLight,
+    opacity: 0.6,
+  },
+  modalButtonText: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  modalCancelButton: {
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    color: palette.textSecondary,
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 
