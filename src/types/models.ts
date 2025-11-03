@@ -134,3 +134,49 @@ export interface LinkedPatient {
   age?: number;
   village?: string;
 }
+
+export interface PatientCreatePayload {
+  name: string;
+  age?: number;
+  gender?: string;
+  village?: string;
+  phone?: string;
+  riskLevel?: RiskLevel;
+  notes?: string;
+  dateOfBirth?: string;
+  emergencyContact?: string;
+  medicalHistory?: string[];
+  assignedDoctorIds?: string[];
+  assignedAshaIds?: string[];
+  userId?: string;
+}
+
+export interface PatientUpdatePayload extends Partial<PatientCreatePayload> {
+  id: string;
+  archived?: boolean;
+}
+
+export type DoctorReviewStatus = 'draft' | 'submitted' | 'archived';
+
+export interface DoctorReview {
+  id: string;
+  patientId: string;
+  doctorId: string;
+  title: string;
+  summary?: string;
+  notes: string;
+  attachments?: string[];
+  status: DoctorReviewStatus;
+  createdAt: string;
+  updatedAt: string;
+  submittedAt?: string;
+  lastEditedBy?: string;
+}
+
+export interface DoctorReviewPayload {
+  title: string;
+  notes: string;
+  summary?: string;
+  attachments?: string[];
+  status?: DoctorReviewStatus;
+}

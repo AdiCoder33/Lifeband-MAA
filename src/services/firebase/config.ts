@@ -43,7 +43,9 @@ export const Collections = {
   VACCINATION_RECORDS: 'vaccinationRecords',
   DOCTOR_PATIENT_LINKS: 'doctorPatientLinks',
   DOCTOR_INVITES: 'doctorInvites',
-  MONTHLY_REPORTS: 'monthlyReports'
+  MONTHLY_REPORTS: 'monthlyReports',
+  DOCTOR_REVIEWS: 'doctorReviews',
+  PATIENT_DOCUMENTS: 'patientDocuments'
 } as const;
 
 export default {
