@@ -24,7 +24,8 @@ export interface PatientProfile extends FirebaseUser {
     weeks: number;
     complications?: string[];
   };
-  assignedDoctor?: string; // Doctor ID
+  assignedDoctors?: string[]; // Connected doctors
+  primaryDoctorId?: string;
   assignedASHA?: string; // ASHA Worker ID
 }
 
@@ -111,10 +112,22 @@ class AuthService {
   // Create user profile in Firestore
   async createUserProfile(uid: string, userInfo: Partial<FirebaseUser>) {
     try {
+      const baseProfile = {
+        ...userInfo,
+        linkedDoctorIds:
+          userInfo.role === 'patient'
+            ? []
+            : (userInfo as Record<string, any>).linkedDoctorIds ?? [],
+        linkedPatientIds:
+          userInfo.role === 'doctor'
+            ? []
+            : (userInfo as Record<string, any>).linkedPatientIds ?? [],
+      };
+
       await FirebaseFirestore()
         .collection(Collections.USERS)
         .doc(uid)
-        .set(userInfo);
+        .set(baseProfile);
 
       // Create role-specific profile
       if (userInfo.role === 'patient') {
@@ -124,7 +137,10 @@ class AuthService {
           .set({
             ...userInfo,
             medicalHistory: [],
-            emergencyContact: ''
+            emergencyContact: '',
+            assignedDoctors: [],
+            linkedDoctorIds: [],
+            primaryDoctorId: null,
           });
       } else if (userInfo.role === 'doctor') {
         await FirebaseFirestore()
@@ -133,7 +149,8 @@ class AuthService {
           .set({
             ...userInfo,
             qualifications: [],
-            availableSlots: []
+            availableSlots: [],
+            linkedPatientIds: [],
           });
       } else if (userInfo.role === 'asha') {
         await FirebaseFirestore()

@@ -16,6 +16,7 @@ import PatientManagementScreen from '../screens/doctor/PatientManagementScreen';
 import DoctorAnalyticsScreen from '../screens/doctor/DoctorAnalyticsScreen';
 import DoctorScheduleScreen from '../screens/doctor/DoctorScheduleScreen';
 import DoctorAppointmentsScreen from '../screens/doctor/DoctorAppointmentsScreen';
+import DoctorInviteScreen from '../screens/doctor/DoctorInviteScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import {useAuth} from '../context/AuthContext';
 import {palette} from '../theme';
@@ -31,6 +32,7 @@ export type DoctorDrawerParamList = {
   DoctorSchedule: undefined;
   DoctorAppointments: undefined;
   Profile: undefined;
+  DoctorInvites: undefined;
 };
 
 const Stack = createNativeStackNavigator<DoctorDrawerParamList>();
@@ -126,6 +128,8 @@ export const CustomDoctorDrawer: React.FC<CustomDoctorDrawerProps> = ({
         return 'My Schedule';
       case 'DoctorAppointments':
         return 'Appointments';
+      case 'DoctorInvites':
+        return 'Doctor QR Invites';
       case 'PatientDetail':
         return 'Patient Details';
       case 'Profile':
@@ -171,6 +175,10 @@ export const CustomDoctorDrawer: React.FC<CustomDoctorDrawerProps> = ({
         <Stack.Screen
           name="DoctorAppointments"
           component={DoctorAppointmentsScreen}
+        />
+        <Stack.Screen
+          name="DoctorInvites"
+          component={DoctorInviteScreen}
         />
         <Stack.Screen
           name="Profile"

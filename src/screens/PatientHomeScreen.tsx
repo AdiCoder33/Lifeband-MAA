@@ -1,5 +1,6 @@
-import React, {useMemo, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View, Dimensions, TouchableOpacity, Alert} from 'react-native';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import {ActivityIndicator, ScrollView, StyleSheet, Text, View, Dimensions, TouchableOpacity, Alert} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
 import {
   VictoryArea,
   VictoryAxis,
@@ -14,6 +15,8 @@ import ReadingTile from '../components/ReadingTile';
 import {useAuth} from '../context/AuthContext';
 import {useAppStore} from '../store/useAppStore';
 import {usePatientReadings} from '../hooks/usePatientReadings';
+import DoctorPatientLinkService from '../services/firebase/DoctorPatientLinkService';
+import {LinkedDoctor, MonthlyReportSummary} from '../types/models';
 import {palette, radii, spacing} from '../theme';
 
 const now = Date.now();
@@ -43,9 +46,11 @@ const demoBabyMovement = new Array(6).fill(0).map((_, index) => ({
 }));
 
 export const PatientHomeScreen: React.FC = () => {
-  const {name, identifier} = useAuth();
+  const navigation = useNavigation();
+  const {name, identifier, user} = useAuth();
+  const patientUid = user?.uid ?? (typeof identifier === 'string' ? identifier : undefined);
   const selectedPatient = useAppStore(state => state.selectedPatientId);
-  const readings = usePatientReadings(selectedPatient ?? identifier, {
+  const readings = usePatientReadings(selectedPatient ?? patientUid ?? identifier, {
     days: 7,
   });
   const latest = readings[0];
@@ -66,6 +71,32 @@ export const PatientHomeScreen: React.FC = () => {
       taken: false,
     },
   ]);
+  const [careTeamLoading, setCareTeamLoading] = useState(false);
+  const [linkedDoctors, setLinkedDoctors] = useState<LinkedDoctor[]>([]);
+  const [recentReports, setRecentReports] = useState<MonthlyReportSummary[]>([]);
+
+  const loadCareTeam = useCallback(async () => {
+    if (!patientUid) {
+      return;
+    }
+    try {
+      setCareTeamLoading(true);
+      const [doctors, reports] = await Promise.all([
+        DoctorPatientLinkService.getLinkedDoctors(patientUid),
+        DoctorPatientLinkService.getMonthlyReportsForPatient(patientUid),
+      ]);
+      setLinkedDoctors(doctors);
+      setRecentReports(reports.slice(0, 3));
+    } catch (error) {
+      console.log('Failed to load care team data', error);
+    } finally {
+      setCareTeamLoading(false);
+    }
+  }, [patientUid]);
+
+  useEffect(() => {
+    loadCareTeam();
+  }, [loadCareTeam]);
 
   const handleScanForBands = () => {
     Alert.alert(
@@ -167,6 +198,10 @@ export const PatientHomeScreen: React.FC = () => {
         .reverse()
     : demoBabyMovement;
 
+  const handleManageCareTeam = useCallback(() => {
+    (navigation as any).navigate('LinkDoctor');
+  }, [navigation]);
+
   const lastUpdated = summary.timestamp
     ? new Date(summary.timestamp).toLocaleString()
     : 'No readings yet';
@@ -197,6 +232,108 @@ export const PatientHomeScreen: React.FC = () => {
               <Text style={styles.pregnancyStatSub}>Healthy range</Text>
             </View>
           </View>
+        </View>
+
+        {/* Care Team Section */}
+        <View style={styles.careTeamSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Care Team</Text>
+            <TouchableOpacity onPress={handleManageCareTeam}>
+              <Text style={styles.sectionAction}>Manage</Text>
+            </TouchableOpacity>
+          </View>
+          {careTeamLoading ? (
+            <View style={styles.careTeamLoading}>
+              <ActivityIndicator size="small" color={palette.primary} />
+              <Text style={styles.careTeamLoadingText}>Updating your care team…</Text>
+            </View>
+          ) : linkedDoctors.length ? (
+            linkedDoctors.map(doctor => (
+              <View key={doctor.linkId} style={styles.careTeamCard}>
+                <View style={styles.careTeamAvatar}>
+                  <Text style={styles.careTeamAvatarLabel}>
+                    {doctor.name
+                      ?.split(' ')
+                      .map(part => part[0]?.toUpperCase() ?? '')
+                      .slice(0, 2)
+                      .join('') || 'DR'}
+                  </Text>
+                </View>
+                <View style={styles.careTeamInfo}>
+                  <Text style={styles.careTeamName}>
+                    {doctor.name ? `Dr. ${doctor.name}` : 'Doctor'}
+                  </Text>
+                  {doctor.specialization ? (
+                    <Text style={styles.careTeamMeta}>{doctor.specialization}</Text>
+                  ) : null}
+                  {doctor.latestReport ? (
+                    <Text style={styles.careTeamReport}>
+                      Last report{' '}
+                      {new Date(doctor.latestReport.createdAt).toLocaleDateString()}
+                    </Text>
+                  ) : (
+                    <Text style={styles.careTeamReport}>
+                      Waiting for first monthly report
+                    </Text>
+                  )}
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.careTeamEmpty}>
+              <Text style={styles.careTeamEmptyTitle}>No doctors connected yet</Text>
+              <Text style={styles.careTeamEmptyCopy}>
+                Ask your doctor to share their LifeBand QR so they can review your readings
+                and send monthly reports.
+              </Text>
+              <TouchableOpacity
+                style={styles.careTeamButton}
+                onPress={handleManageCareTeam}>
+                <Text style={styles.careTeamButtonLabel}>Link a doctor</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* Monthly Reports */}
+        <View style={styles.reportsSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Latest Monthly Reports</Text>
+            <TouchableOpacity onPress={handleManageCareTeam}>
+              <Text style={styles.sectionAction}>View all</Text>
+            </TouchableOpacity>
+          </View>
+          {recentReports.length ? (
+            recentReports.map(report => (
+              <View key={report.id} style={styles.reportCard}>
+                <View style={styles.reportHeader}>
+                  <Text style={styles.reportDoctor}>
+                    {report.doctorName ? `Dr. ${report.doctorName}` : 'Doctor'}
+                  </Text>
+                  <Text style={styles.reportDate}>
+                    {new Date(report.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Text style={styles.reportPeriod}>
+                  {report.periodStart} → {report.periodEnd}
+                </Text>
+                <Text style={styles.reportSummary}>{report.summary}</Text>
+                {report.recommendations ? (
+                  <Text style={styles.reportRecommendations}>
+                    Recommendations: {report.recommendations}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <View style={styles.careTeamEmpty}>
+              <Text style={styles.careTeamEmptyTitle}>Monthly report pending</Text>
+              <Text style={styles.careTeamEmptyCopy}>
+                Doctors submit a monthly summary after reviewing your readings. Reports will
+                appear here automatically.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Medicine Reminders Section */}
@@ -784,6 +921,147 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     opacity: 0.9,
     marginTop: 2,
+  },
+  careTeamSection: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: palette.surface,
+    borderRadius: radii.lg,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  sectionAction: {
+    color: palette.primary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  careTeamLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  careTeamLoadingText: {
+    color: palette.textSecondary,
+    fontSize: 13,
+  },
+  careTeamCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surfaceSoft,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  careTeamAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  careTeamAvatarLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 18,
+  },
+  careTeamInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  careTeamName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  careTeamMeta: {
+    color: palette.textSecondary,
+    fontSize: 12,
+  },
+  careTeamReport: {
+    color: palette.textSecondary,
+    fontSize: 11,
+    fontStyle: 'italic',
+  },
+  careTeamEmpty: {
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceSoft,
+    gap: spacing.sm,
+  },
+  careTeamEmptyTitle: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  careTeamEmptyCopy: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  careTeamButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
+  },
+  careTeamButtonLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '600',
+  },
+  reportsSection: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    backgroundColor: palette.surface,
+    borderRadius: radii.lg,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  reportCard: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceSoft,
+    gap: spacing.xs,
+  },
+  reportHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reportDoctor: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  reportDate: {
+    color: palette.textSecondary,
+    fontSize: 12,
+  },
+  reportPeriod: {
+    color: palette.textSecondary,
+    fontSize: 12,
+  },
+  reportSummary: {
+    color: palette.textPrimary,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  reportRecommendations: {
+    color: palette.textSecondary,
+    fontSize: 12,
+    lineHeight: 18,
   },
   // Pregnancy tracking styles
   pregnancySection: {

@@ -1,9 +1,13 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TextInput,
   View,
 } from 'react-native';
 import {RouteProp, useRoute} from '@react-navigation/native';
@@ -27,6 +31,9 @@ import { ReadingPayload } from '../../features/patients/types'; // Update the pa
 import {usePatientReadings} from '../../hooks/usePatientReadings';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore} from '../../store/useReadingStore';
+import {useAuth} from '../../context/AuthContext';
+import DoctorPatientLinkService from '../../services/firebase/DoctorPatientLinkService';
+import {MonthlyReportSummary} from '../../types/models';
 import {palette, radii, spacing} from '../../theme';
 
 const ranges = [
@@ -52,11 +59,97 @@ export const PatientDetailScreen: React.FC = () => {
     days: range.days,
   });
   const setSelectedPatient = useAppStore(state => state.setSelectedPatient);
+  const {user} = useAuth();
+  const doctorId = user?.uid;
+  const [reports, setReports] = useState<MonthlyReportSummary[]>([]);
+  const [reportsLoading, setReportsLoading] = useState(true);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportSummary, setReportSummary] = useState('');
+  const [reportRecommendations, setReportRecommendations] = useState('');
+  const [reportPeriodStart, setReportPeriodStart] = useState('');
+  const [reportPeriodEnd, setReportPeriodEnd] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
+
+  const loadReports = useCallback(async () => {
+    try {
+      setReportsLoading(true);
+      const reportData = await DoctorPatientLinkService.getMonthlyReportsForPatient(
+        params.patientId,
+      );
+      setReports(reportData);
+    } catch (error) {
+      console.log('Failed to load monthly reports', error);
+    } finally {
+      setReportsLoading(false);
+    }
+  }, [params.patientId]);
+
+  useEffect(() => {
+    loadReports();
+  }, [loadReports]);
 
   useEffect(() => {
     setSelectedPatient(params.patientId);
     return () => setSelectedPatient(undefined);
   }, [params.patientId, setSelectedPatient]);
+
+  const resetReportForm = () => {
+    setReportSummary('');
+    setReportRecommendations('');
+    setReportPeriodStart('');
+    setReportPeriodEnd('');
+  };
+
+  const handleOpenReportModal = () => {
+    setReportModalVisible(true);
+  };
+
+  const handleCloseReportModal = () => {
+    setReportModalVisible(false);
+    resetReportForm();
+  };
+
+  const handleSubmitReport = async () => {
+    if (!doctorId) {
+      Alert.alert('Not signed in', 'Please sign in again to submit reports.');
+      return;
+    }
+
+    if (!reportSummary.trim()) {
+      Alert.alert('Missing summary', 'Please add a summary of your review.');
+      return;
+    }
+
+    if (!reportPeriodStart.trim() || !reportPeriodEnd.trim()) {
+      Alert.alert(
+        'Missing period',
+        'Provide the start and end dates covered by this report.',
+      );
+      return;
+    }
+
+    try {
+      setSubmittingReport(true);
+      await DoctorPatientLinkService.submitMonthlyReport({
+        doctorId,
+        patientId: params.patientId,
+        periodStart: reportPeriodStart.trim(),
+        periodEnd: reportPeriodEnd.trim(),
+        summary: reportSummary.trim(),
+        recommendations: reportRecommendations.trim() || undefined,
+      });
+      await loadReports();
+      Alert.alert('Report submitted', 'Monthly report shared with the patient.');
+      handleCloseReportModal();
+    } catch (error: any) {
+      Alert.alert(
+        'Unable to submit report',
+        error?.message ?? 'Please try again later.',
+      );
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
 
   const heartRateSeries = useMemo(
     () =>
@@ -319,6 +412,52 @@ export const PatientDetailScreen: React.FC = () => {
           </VictoryChart>
         </View>
 
+        <View style={styles.monthlyReportSection}>
+          <View style={styles.monthlyReportHeader}>
+            <Text style={styles.monthlyReportTitle}>Monthly reports</Text>
+            <TouchableOpacity onPress={loadReports}>
+              <Text style={styles.monthlyReportAction}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          {reportsLoading ? (
+            <View style={styles.reportLoading}>
+              <ActivityIndicator size="small" color={palette.primary} />
+              <Text style={styles.reportLoadingText}>Loading reports…</Text>
+            </View>
+          ) : reports.length ? (
+            reports.map(report => (
+              <View key={report.id} style={styles.monthlyReportCard}>
+                <View style={styles.monthlyReportCardHeader}>
+                  <Text style={styles.monthlyReportPeriod}>
+                    {report.periodStart} → {report.periodEnd}
+                  </Text>
+                  <Text style={styles.monthlyReportDate}>
+                    {new Date(report.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Text style={styles.monthlyReportSummary}>{report.summary}</Text>
+                {report.recommendations ? (
+                  <Text style={styles.monthlyReportRecommendations}>
+                    Recommendations: {report.recommendations}
+                  </Text>
+                ) : null}
+              </View>
+            ))
+          ) : (
+            <View style={styles.reportEmptyState}>
+              <Text style={styles.reportEmptyTitle}>No reports yet</Text>
+              <Text style={styles.reportEmptyCopy}>
+                Submit a monthly summary after reviewing the patient&apos;s readings.
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={styles.reportButton}
+            onPress={handleOpenReportModal}>
+            <Text style={styles.reportButtonLabel}>Submit monthly report</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.notesCard}>
           <Text style={styles.notesTitle}>Care coordination</Text>
           <Text style={styles.notesCopy}>
@@ -346,6 +485,86 @@ export const PatientDetailScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      <Modal
+        visible={reportModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={handleCloseReportModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Submit monthly report</Text>
+            <Text style={styles.modalSubtitle}>
+              Share a summary of the past month&apos;s review with the patient.
+            </Text>
+            <View style={styles.modalRow}>
+              <View style={styles.modalField}>
+                <Text style={styles.inputLabel}>Period start</Text>
+                <TextInput
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={palette.textSecondary}
+                  style={styles.modalInput}
+                  value={reportPeriodStart}
+                  onChangeText={setReportPeriodStart}
+                />
+              </View>
+              <View style={styles.modalField}>
+                <Text style={styles.inputLabel}>Period end</Text>
+                <TextInput
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={palette.textSecondary}
+                  style={styles.modalInput}
+                  value={reportPeriodEnd}
+                  onChangeText={setReportPeriodEnd}
+                />
+              </View>
+            </View>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Summary</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalTextarea]}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                placeholder="Key findings, risks, and next steps"
+                placeholderTextColor={palette.textSecondary}
+                value={reportSummary}
+                onChangeText={setReportSummary}
+              />
+            </View>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Recommendations (optional)</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalTextarea]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                placeholder="Prescriptions, follow-up plans, lifestyle guidance"
+                placeholderTextColor={palette.textSecondary}
+                value={reportRecommendations}
+                onChangeText={setReportRecommendations}
+              />
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondary]}
+                onPress={handleCloseReportModal}
+                disabled={submittingReport}>
+                <Text style={styles.modalSecondaryLabel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalPrimary, submittingReport && styles.disabled]}
+                onPress={handleSubmitReport}
+                disabled={submittingReport}>
+                {submittingReport ? (
+                  <ActivityIndicator size="small" color={palette.textOnPrimary} />
+                ) : (
+                  <Text style={styles.modalPrimaryLabel}>Submit report</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScreenBackground>
   );
 };
@@ -464,6 +683,179 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.textPrimary,
     marginBottom: spacing.sm,
+  },
+  monthlyReportSection: {
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+    elevation: 6,
+  },
+  monthlyReportHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  monthlyReportTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  monthlyReportAction: {
+    color: palette.primary,
+    fontWeight: '600',
+  },
+  reportLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  reportLoadingText: {
+    fontSize: 13,
+    color: palette.textSecondary,
+  },
+  monthlyReportCard: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surfaceSoft,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  monthlyReportCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  monthlyReportPeriod: {
+    fontWeight: '600',
+    color: palette.textPrimary,
+    fontSize: 13,
+  },
+  monthlyReportDate: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  monthlyReportSummary: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: palette.textPrimary,
+  },
+  monthlyReportRecommendations: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  reportEmptyState: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surfaceSoft,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+  reportEmptyTitle: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  reportEmptyCopy: {
+    color: palette.textSecondary,
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  reportButton: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
+  },
+  reportButtonLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%',
+    borderRadius: radii.xl,
+    backgroundColor: palette.surface,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  modalSubtitle: {
+    color: palette.textSecondary,
+    fontSize: 13,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  modalField: {
+    flex: 1,
+  },
+  inputLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: palette.textSecondary,
+    marginBottom: spacing.xs,
+  },
+  modalInput: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: palette.textPrimary,
+    backgroundColor: palette.surface,
+  },
+  modalTextarea: {
+    minHeight: 96,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
+  modalButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+  },
+  modalSecondary: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  modalSecondaryLabel: {
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  modalPrimary: {
+    backgroundColor: palette.primary,
+  },
+  modalPrimaryLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+  },
+  disabled: {
+    opacity: 0.6,
   },
   notesCard: {
     marginTop: spacing.xl,

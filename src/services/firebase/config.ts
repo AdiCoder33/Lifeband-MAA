@@ -40,7 +40,10 @@ export const Collections = {
   EMERGENCY_CONTACTS: 'emergencyContacts',
   MATERNAL_VISITS: 'maternalVisits',
   HEALTH_EDUCATION: 'healthEducation',
-  VACCINATION_RECORDS: 'vaccinationRecords'
+  VACCINATION_RECORDS: 'vaccinationRecords',
+  DOCTOR_PATIENT_LINKS: 'doctorPatientLinks',
+  DOCTOR_INVITES: 'doctorInvites',
+  MONTHLY_REPORTS: 'monthlyReports'
 } as const;
 
 export default {

@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+﻿import React, {useMemo, useState} from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -43,7 +43,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'dashboard',
       title: 'Doctor Dashboard',
-      icon: '🏥',
+      icon: 'DB',
       description: 'Your medical practice overview',
       onPress: () => {
         setSelectedMenuItem('dashboard');
@@ -55,7 +55,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'patients',
       title: 'Patient Management',
-      icon: '👥',
+      icon: 'PT',
       description: 'Manage your patient roster',
       onPress: () => {
         setSelectedMenuItem('patients');
@@ -65,9 +65,21 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
       },
     },
     {
+      id: 'doctor-invites',
+      title: 'Doctor QR Invites',
+      icon: 'QR',
+      description: 'Generate patient QR codes',
+      onPress: () => {
+        setSelectedMenuItem('doctor-invites');
+        navigation.navigate('DoctorInvites' as never);
+        onNavigate?.('DoctorInvites');
+        onClose?.();
+      },
+    },
+    {
       id: 'appointments',
       title: 'Appointments',
-      icon: '📅',
+      icon: 'AP',
       description: 'View & manage appointments',
       onPress: () => {
         setSelectedMenuItem('appointments');
@@ -79,7 +91,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'schedule',
       title: 'My Schedule',
-      icon: '🗓️',
+      icon: 'SC',
       description: 'Your daily schedule & availability',
       onPress: () => {
         setSelectedMenuItem('schedule');
@@ -91,7 +103,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'analytics',
       title: 'Medical Analytics',
-      icon: '📊',
+      icon: 'AN',
       description: 'Patient data & health trends',
       onPress: () => {
         setSelectedMenuItem('analytics');
@@ -103,7 +115,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'research',
       title: 'Research & Studies',
-      icon: '🔬',
+      icon: 'RS',
       description: 'Clinical research data',
       onPress: () => {
         setSelectedMenuItem('research');
@@ -114,7 +126,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'guidelines',
       title: 'Medical Guidelines',
-      icon: '📋',
+      icon: 'GL',
       description: 'Treatment protocols & guidelines',
       onPress: () => {
         setSelectedMenuItem('guidelines');
@@ -125,7 +137,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'education',
       title: 'Medical Education',
-      icon: '🎓',
+      icon: 'ED',
       description: 'CME courses & medical updates',
       onPress: () => {
         setSelectedMenuItem('education');
@@ -136,7 +148,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'profile',
       title: 'Profile Settings',
-      icon: '⚙️',
+      icon: 'PF',
       description: 'Account settings & preferences',
       onPress: () => {
         setSelectedMenuItem('profile');
@@ -151,7 +163,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'emergency',
       title: 'Emergency Alert',
-      icon: '🚨',
+      icon: 'ðŸš¨',
       color: palette.danger,
       onPress: () => {
         Alert.alert('Emergency Protocol', 'Emergency response system activated');
@@ -161,7 +173,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
     {
       id: 'new-patient',
       title: 'Add Patient',
-      icon: '👤',
+      icon: 'ðŸ‘¤',
       color: palette.primary,
       onPress: () => {
         Alert.alert('Add Patient', 'New patient registration form');
@@ -187,7 +199,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
         </View>
         
         <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-          <Text style={styles.closeButtonText}>×</Text>
+          <Text style={styles.closeButtonText}>Ã—</Text>
         </TouchableOpacity>
       </View>
 
@@ -255,7 +267,7 @@ export const DoctorSideDrawer: React.FC<DoctorSideDrawerProps> = ({
                   </Text>
                 </View>
               </View>
-              <Text style={styles.menuItemArrow}>›</Text>
+              <Text style={styles.menuItemArrow}>â€º</Text>
             </TouchableOpacity>
           ))}
         </View>

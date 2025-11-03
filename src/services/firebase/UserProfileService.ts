@@ -19,6 +19,10 @@ export interface UserProfile {
   specialization?: string;
   // ASHA specific
   workArea?: string;
+  // Linking
+  linkedDoctorIds?: string[];
+  linkedPatientIds?: string[];
+  primaryDoctorId?: string | null;
   // Timestamps
   createdAt: string;
   updatedAt: string;

@@ -22,6 +22,7 @@ import NutritionGuideScreen from '../screens/maternal/NutritionGuideScreen';
 import PrenatalExerciseScreen from '../screens/maternal/PrenatalExerciseScreen';
 import BabyDevelopmentScreen from '../screens/maternal/BabyDevelopmentScreen';
 import EmergencyContactsScreen from '../screens/maternal/EmergencyContactsScreen';
+import LinkDoctorScreen from '../screens/patient/LinkDoctorScreen';
 import {useAuth} from '../context/AuthContext';
 import {palette} from '../theme';
 
@@ -41,6 +42,7 @@ export type DrawerParamList = {
   PrenatalExercise: undefined;
   BabyDevelopment: undefined;
   EmergencyContacts: undefined;
+  LinkDoctor: undefined;
 };
 
 const Stack = createNativeStackNavigator<DrawerParamList>();
@@ -142,6 +144,8 @@ export const CustomDrawer: React.FC<CustomDrawerProps> = ({
         return 'Baby Development';
       case 'EmergencyContacts':
         return 'Emergency Contacts';
+      case 'LinkDoctor':
+        return 'My Care Team';
       default:
         return `Welcome, ${userName}`;
     }
@@ -207,6 +211,10 @@ export const CustomDrawer: React.FC<CustomDrawerProps> = ({
         <Stack.Screen
           name="EmergencyContacts"
           component={EmergencyContactsScreen}
+        />
+        <Stack.Screen
+          name="LinkDoctor"
+          component={LinkDoctorScreen}
         />
       </Stack.Navigator>
 

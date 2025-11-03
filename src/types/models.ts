@@ -1,6 +1,8 @@
 export type RiskLevel = 'LOW' | 'MODERATE' | 'HIGH';
 export type UserRole = 'patient' | 'doctor' | 'asha';
 
+export type DoctorPatientLinkStatus = 'pending' | 'active' | 'revoked';
+
 export interface PatientSummary {
   id: string;
   name: string;
@@ -38,4 +40,97 @@ export interface RiskFeedItem {
   risk: RiskLevel;
   message?: string;
   receivedAt: string;
+}
+
+export interface DoctorPatientLink {
+  id: string;
+  doctorId: string;
+  patientId: string;
+  status: DoctorPatientLinkStatus;
+  createdAt: string;
+  createdBy: 'doctor' | 'patient';
+  revokedAt?: string;
+  lastReportSubmittedAt?: string;
+}
+
+export interface DoctorSummary {
+  id: string;
+  name: string;
+  email?: string;
+  phoneNumber?: string;
+  specialization?: string;
+  hospital?: string;
+  photoUrl?: string;
+  qualifications?: string[];
+}
+
+export interface MonthlyReportSummary {
+  id: string;
+  doctorId: string;
+  doctorName?: string;
+  patientId: string;
+  periodStart: string;
+  periodEnd: string;
+  summary: string;
+  recommendations?: string;
+  createdAt: string;
+  createdAtMs: number;
+}
+
+export interface MonthlyReport extends MonthlyReportSummary {
+  linkId: string;
+  vitalsSnapshot?: {
+    heartRate?: number;
+    spo2?: number;
+    systolic?: number;
+    diastolic?: number;
+    temperature?: number;
+  };
+}
+
+export interface MonthlyReportPayload {
+  doctorId: string;
+  patientId: string;
+  periodStart: string;
+  periodEnd: string;
+  summary: string;
+  recommendations?: string;
+  vitalsSnapshot?: {
+    heartRate?: number;
+    spo2?: number;
+    systolic?: number;
+    diastolic?: number;
+    temperature?: number;
+  };
+}
+
+export interface DoctorInvite {
+  id: string;
+  doctorId: string;
+  code: string;
+  createdAt: string;
+  expiresAt: string;
+  usesRemaining: number;
+  maxUses: number;
+  label?: string | null;
+}
+
+export interface LinkedDoctor extends DoctorSummary {
+  linkId: string;
+  linkStatus: DoctorPatientLinkStatus;
+  linkedAt: string;
+  lastReportSubmittedAt?: string;
+  latestReport?: MonthlyReportSummary;
+}
+
+export interface LinkedPatient {
+  linkId: string;
+  patientId: string;
+  patientName: string;
+  status: DoctorPatientLinkStatus;
+  linkedAt: string;
+  lastReadingAt?: string;
+  lastReportSubmittedAt?: string;
+  age?: number;
+  village?: string;
 }

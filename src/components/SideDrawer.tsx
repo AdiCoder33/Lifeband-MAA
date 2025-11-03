@@ -1,4 +1,4 @@
-import React, {useMemo, useState} from 'react';
+﻿import React, {useMemo, useState} from 'react';
 import {
   StyleSheet,
   Text,
@@ -52,7 +52,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'dashboard',
       title: 'Mother Dashboard',
-      icon: '🏠',
+      icon: 'ðŸ ',
       description: 'Your maternal health overview',
       onPress: () => {
         setSelectedMenuItem('dashboard');
@@ -62,9 +62,21 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
       },
     },
     {
+      id: 'care-team',
+      title: 'My Care Team',
+      icon: 'Dr',
+      description: 'Link doctors & view monthly reports',
+      onPress: () => {
+        setSelectedMenuItem('care-team');
+        navigation.navigate('LinkDoctor' as never);
+        onNavigate?.('LinkDoctor');
+        onClose?.();
+      },
+    },
+    {
       id: 'appointments',
       title: 'My Appointments',
-      icon: '📅',
+      icon: 'ðŸ“…',
       description: 'View & schedule medical visits',
       onPress: () => {
         setSelectedMenuItem('appointments');
@@ -76,7 +88,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'analytics',
       title: 'Health Analytics',
-      icon: '�',
+      icon: 'ï¿½',
       description: 'Detailed health insights & trends',
       onPress: () => {
         setSelectedMenuItem('analytics');
@@ -88,7 +100,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'medicine',
       title: 'Medicine Tracker',
-      icon: '💊',
+      icon: 'ðŸ’Š',
       description: 'Track medications & supplements',
       onPress: () => {
         setSelectedMenuItem('medicine');
@@ -100,7 +112,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'nutrition',
       title: 'Nutrition Guide',
-      icon: '🥗',
+      icon: 'ðŸ¥—',
       description: 'Pregnancy nutrition & meal plans',
       onPress: () => {
         setSelectedMenuItem('nutrition');
@@ -112,7 +124,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'exercise',
       title: 'Prenatal Exercise',
-      icon: '🧘‍♀️',
+      icon: 'ðŸ§˜â€â™€ï¸',
       description: 'Safe exercises for pregnancy',
       onPress: () => {
         setSelectedMenuItem('exercise');
@@ -124,7 +136,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'baby-development',
       title: 'Baby Development',
-      icon: '👶',
+      icon: 'ðŸ‘¶',
       description: 'Track your baby\'s growth',
       onPress: () => {
         setSelectedMenuItem('baby-development');
@@ -136,7 +148,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'emergency',
       title: 'Emergency Contacts',
-      icon: '🚨',
+      icon: 'ðŸš¨',
       description: 'Quick access to emergency help',
       onPress: () => {
         setSelectedMenuItem('emergency');
@@ -148,7 +160,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'settings',
       title: 'Settings',
-      icon: '⚙️',
+      icon: 'âš™ï¸',
       description: 'App preferences & account',
       onPress: () => {
         setSelectedMenuItem('settings');
@@ -163,14 +175,14 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
     {
       id: 'scan',
       title: 'Scan LifeBand',
-      icon: '📡',
+      icon: 'ðŸ“¡',
       color: palette.primary,
       onPress: onBandPress,
     },
     {
       id: 'emergency-call',
       title: 'Emergency Call',
-      icon: '📞',
+      icon: 'ðŸ“ž',
       color: palette.danger,
       onPress: () => {
         Alert.alert(
@@ -291,7 +303,7 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.menuItemArrow}>›</Text>
+                <Text style={styles.menuItemArrow}>â€º</Text>
               </View>
             </TouchableOpacity>
           ))}
@@ -302,17 +314,17 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
           <Text style={styles.sectionTitle}>Today's Summary</Text>
           <View style={styles.healthSummary}>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricIcon}>❤️</Text>
+              <Text style={styles.healthMetricIcon}>â¤ï¸</Text>
               <Text style={styles.healthMetricLabel}>Heart Rate</Text>
               <Text style={styles.healthMetricValue}>72 BPM</Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricIcon}>🏃</Text>
+              <Text style={styles.healthMetricIcon}>ðŸƒ</Text>
               <Text style={styles.healthMetricLabel}>Steps</Text>
               <Text style={styles.healthMetricValue}>8,432</Text>
             </View>
             <View style={styles.healthMetric}>
-              <Text style={styles.healthMetricIcon}>😌</Text>
+              <Text style={styles.healthMetricIcon}>ðŸ˜Œ</Text>
               <Text style={styles.healthMetricLabel}>Stress Level</Text>
               <Text style={styles.healthMetricValue}>Low</Text>
             </View>
@@ -327,11 +339,11 @@ export const SideDrawer: React.FC<SideDrawerProps> = ({
           onNavigate?.('Profile');
           onClose?.();
         }}>
-          <Text style={styles.profileButtonIcon}>👤</Text>
+          <Text style={styles.profileButtonIcon}>ðŸ‘¤</Text>
           <Text style={styles.profileButtonText}>View Profile</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
-          <Text style={styles.signOutButtonIcon}>🚪</Text>
+          <Text style={styles.signOutButtonIcon}>ðŸšª</Text>
           <Text style={styles.signOutButtonText}>Sign Out</Text>
         </TouchableOpacity>
       </View>
