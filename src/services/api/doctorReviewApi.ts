@@ -30,3 +30,8 @@ export const deleteDoctorReview = async (reviewId: string): Promise<void> =>
 
 export const archiveDoctorReview = async (reviewId: string): Promise<void> =>
   DoctorReviewService.archiveReview(reviewId);
+
+export const fetchRecentDoctorReviews = async (
+  doctorId: string,
+  limit = 5,
+): Promise<DoctorReview[]> => DoctorReviewService.listRecentReviews(doctorId, limit);

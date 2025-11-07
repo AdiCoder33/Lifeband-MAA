@@ -1,250 +1,577 @@
-import React from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
+  ActivityIndicator,
   Dimensions,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {palette, spacing, radii} from '../../theme';
+import {palette, radii, spacing} from '../../theme';
+import {useFirebaseHealth} from '../../services/hooks/useFirebaseHealth';
+import type {HealthReading} from '../../services/firebase/health';
 
 const {width: SCREEN_WIDTH} = Dimensions.get('window');
 
-const AnalyticsScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
+type MetricCard = {
+  title: string;
+  value: string;
+  trend: string;
+  icon: string;
+  color: string;
+};
 
-  const healthMetrics = [
+type TrimesterCard = {
+  trimester: string;
+  weeks: string;
+  icon: string;
+  color: string;
+  readings: Array<{
+    label: string;
+    value: string;
+    status: 'Normal' | 'Watch' | 'Upcoming';
+  }>;
+  notes: string;
+  current?: boolean;
+};
+
+type AnalyticsSummary = {
+  metrics: MetricCard[];
+  insights: string[];
+  trimester: TrimesterCard[];
+};
+
+const ICONS = {
+  heart: '??',
+  bp: '??',
+  spo2: '??',
+  temp: '???',
+  stress: '???????',
+  movement: '????',
+};
+
+const DEFAULT_SUMMARY: AnalyticsSummary = {
+  metrics: [
     {
-      title: 'Heart Rate Trends',
-      value: '72 BPM',
-      trend: '+2% from last week',
-      icon: '❤️',
-      color: palette.danger,
+      title: 'Heart Rate',
+      value: '-- bpm',
+      trend: 'Awaiting readings',
+      icon: ICONS.heart,
+      color: palette.primary,
+    },
+    {
+      title: 'Blood Oxygen',
+      value: '-- %',
+      trend: 'Awaiting readings',
+      icon: ICONS.spo2,
+      color: palette.info,
     },
     {
       title: 'Blood Pressure',
-      value: '120/80',
-      trend: 'Normal range',
-      icon: '🩺',
+      value: '--/--',
+      trend: 'Awaiting readings',
+      icon: ICONS.bp,
       color: palette.success,
     },
     {
-      title: 'Baby Movement',
-      value: '15 kicks/hr',
-      trend: 'Active today',
-      icon: '👶',
-      color: palette.primary,
-    },
-    {
-      title: 'Stress Level',
-      value: 'Low',
-      trend: 'Improved 10%',
-      icon: '😌',
-      color: palette.success,
-    },
-    {
-      title: 'Sleep Quality',
-      value: '7.5 hrs',
-      trend: '+30 min from avg',
-      icon: '😴',
-      color: palette.primary,
-    },
-    {
-      title: 'Physical Activity',
-      value: '8,432 steps',
-      trend: 'Goal: 10,000',
-      icon: '🏃‍♀️',
+      title: 'Temperature',
+      value: '-- �C',
+      trend: 'Awaiting readings',
+      icon: ICONS.temp,
       color: palette.warning,
     },
-  ];
-
-  const weeklyInsights = [
-    'Your heart rate has been consistently in the healthy range',
-    'Baby movement patterns show healthy development',
-    'Stress levels have decreased by 15% this week',
-    'Sleep quality has improved with consistent bedtime routine',
-  ];
-
-  const trimesterData = [
+    {
+      title: "Mother's Stress",
+      value: '-- %',
+      trend: 'Awaiting readings',
+      icon: ICONS.stress,
+      color: palette.maternal.lavender,
+    },
+    {
+      title: "Baby's Movement",
+      value: '-- kicks/hr',
+      trend: 'Awaiting readings',
+      icon: ICONS.movement,
+      color: palette.maternal.peach,
+    },
+  ],
+  insights: [
+    'Sync your LifeBand to unlock personalised analytics.',
+    'Weekly health insights will appear here after your first readings.',
+  ],
+  trimester: [
     {
       trimester: 'First Trimester',
       weeks: 'Weeks 1-12',
-      icon: '🌱',
+      icon: ICONS.heart,
       color: palette.maternal.mint,
       readings: [
-        { label: 'Avg Heart Rate', value: '68 BPM', status: 'Normal' },
-        { label: 'Avg Blood Pressure', value: '118/76', status: 'Normal' },
-        { label: 'Weight Gain', value: '2.5 kg', status: 'On Track' },
-        { label: 'Visits Completed', value: '3 of 3', status: 'Complete' },
+        {label: 'Avg Heart Rate', value: '-- bpm', status: 'Upcoming'},
+        {label: 'Avg Blood Pressure', value: '--/--', status: 'Upcoming'},
+        {label: 'Baby Movement', value: '--', status: 'Upcoming'},
+        {label: 'Stress Level', value: '--', status: 'Upcoming'},
       ],
-      notes: 'Early pregnancy development phase. Morning sickness managed well.',
+      notes: 'Add readings to compare each trimester.',
     },
     {
       trimester: 'Second Trimester',
       weeks: 'Weeks 13-27',
-      icon: '🌿',
+      icon: ICONS.bp,
       color: palette.maternal.peach,
       readings: [
-        { label: 'Avg Heart Rate', value: '72 BPM', status: 'Normal' },
-        { label: 'Avg Blood Pressure', value: '120/78', status: 'Normal' },
-        { label: 'Weight Gain', value: '6.8 kg', status: 'Healthy' },
-        { label: 'Baby Movement', value: '12-15 kicks/hr', status: 'Active' },
+        {label: 'Avg Heart Rate', value: '-- bpm', status: 'Upcoming'},
+        {label: 'Avg Blood Pressure', value: '--/--', status: 'Upcoming'},
+        {label: 'Baby Movement', value: '--', status: 'Upcoming'},
+        {label: 'Stress Level', value: '--', status: 'Upcoming'},
       ],
-      notes: 'Baby movement detected. Energy levels improved significantly.',
-      current: true,
+      notes: 'Insights will update automatically after data sync.',
     },
     {
       trimester: 'Third Trimester',
       weeks: 'Weeks 28-40',
-      icon: '🌸',
+      icon: ICONS.movement,
       color: palette.maternal.blush,
       readings: [
-        { label: 'Avg Heart Rate', value: '-- BPM', status: 'Upcoming' },
-        { label: 'Avg Blood Pressure', value: '--/--', status: 'Upcoming' },
-        { label: 'Expected Weight', value: '10-12 kg', status: 'Target' },
-        { label: 'Baby Position', value: 'TBD', status: 'Upcoming' },
+        {label: 'Avg Heart Rate', value: '-- bpm', status: 'Upcoming'},
+        {label: 'Avg Blood Pressure', value: '--/--', status: 'Upcoming'},
+        {label: 'Baby Movement', value: '--', status: 'Upcoming'},
+        {label: 'Stress Level', value: '--', status: 'Upcoming'},
       ],
-      notes: 'Final stage preparation. Regular monitoring scheduled.',
+      notes: 'Stay connected to keep this view up to date.',
+      current: true,
+    },
+  ],
+};
+
+const average = (values: Array<number | null | undefined>) => {
+  const valid = values.filter(
+    value => typeof value === 'number' && !Number.isNaN(value),
+  ) as number[];
+  if (!valid.length) {
+    return null;
+  }
+  return valid.reduce((sum, value) => sum + value, 0) / valid.length;
+};
+
+const percentDelta = (current: number | null, previous: number | null) => {
+  if (
+    current == null ||
+    previous == null ||
+    Number.isNaN(current) ||
+    Number.isNaN(previous) ||
+    previous === 0
+  ) {
+    return null;
+  }
+  return ((current - previous) / previous) * 100;
+};
+
+const formatTrend = (delta: number | null, unit: string) => {
+  if (delta == null || Number.isNaN(delta) || !Number.isFinite(delta)) {
+    return 'No recent change';
+  }
+  const direction = delta > 0 ? '+' : '';
+  return `${direction}${delta.toFixed(1)}${unit} vs last week`;
+};
+
+const formatValue = (
+  value: number | null,
+  options: {unit?: string; precision?: number; fallback?: string} = {},
+) => {
+  if (value == null || Number.isNaN(value)) {
+    return options.fallback ?? '--';
+  }
+  const precision = options.precision ?? 0;
+  const formatted = value.toFixed(precision);
+  return options.unit ? `${formatted} ${options.unit}` : formatted;
+};
+
+const buildAnalyticsSummary = (readings: HealthReading[]): AnalyticsSummary => {
+  if (!readings.length) {
+    return DEFAULT_SUMMARY;
+  }
+
+  const sorted = [...readings].sort(
+    (a, b) =>
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+  const latestWeek = sorted.slice(0, 7);
+  const previousWeek = sorted.slice(7, 14);
+
+  const hrAvg = average(latestWeek.map(reading => reading.heartRate));
+  const hrPrevAvg = average(previousWeek.map(reading => reading.heartRate));
+  const spoAvg = average(latestWeek.map(reading => reading.spo2));
+  const spoPrevAvg = average(previousWeek.map(reading => reading.spo2));
+  const tempAvg = average(latestWeek.map(reading => reading.temperature));
+  const tempPrevAvg = average(previousWeek.map(reading => reading.temperature));
+  const systolicAvg = average(latestWeek.map(reading => reading.systolic));
+  const diastolicAvg = average(latestWeek.map(reading => reading.diastolic));
+  const systolicPrev = average(previousWeek.map(reading => reading.systolic));
+  const diastolicPrev = average(previousWeek.map(reading => reading.diastolic));
+  const stressAvg = average(latestWeek.map(reading => reading.stressLevel));
+  const stressPrev = average(previousWeek.map(reading => reading.stressLevel));
+  const movementAvg = average(latestWeek.map(reading => reading.babyMovement));
+  const movementPrev = average(
+    previousWeek.map(reading => reading.babyMovement),
+  );
+
+  const metrics: MetricCard[] = [
+    {
+      title: 'Heart Rate',
+      value: formatValue(hrAvg, {unit: 'bpm'}),
+      trend: formatTrend(percentDelta(hrAvg, hrPrevAvg), '%'),
+      icon: ICONS.heart,
+      color: palette.primary,
+    },
+    {
+      title: 'Blood Oxygen',
+      value: formatValue(spoAvg, {unit: '%', precision: 1}),
+      trend: formatTrend(percentDelta(spoAvg, spoPrevAvg), '%'),
+      icon: ICONS.spo2,
+      color: palette.info,
+    },
+    {
+      title: 'Blood Pressure',
+      value:
+        systolicAvg && diastolicAvg
+          ? `${Math.round(systolicAvg)}/${Math.round(diastolicAvg)}`
+          : '--/--',
+      trend:
+        systolicAvg && diastolicAvg && systolicPrev && diastolicPrev
+          ? `? ${Math.round(systolicAvg - systolicPrev)}/${Math.round(
+              diastolicAvg - diastolicPrev,
+            )} vs last week`
+          : 'No recent change',
+      icon: ICONS.bp,
+      color: palette.success,
+    },
+    {
+      title: 'Temperature',
+      value: formatValue(tempAvg, {unit: '�C', precision: 1}),
+      trend: formatTrend(percentDelta(tempAvg, tempPrevAvg), '%'),
+      icon: ICONS.temp,
+      color: palette.warning,
+    },
+    {
+      title: "Mother's Stress",
+      value: formatValue(stressAvg, {unit: '%', precision: 0}),
+      trend: formatTrend(percentDelta(stressAvg, stressPrev), '%'),
+      icon: ICONS.stress,
+      color: palette.maternal.lavender,
+    },
+    {
+      title: "Baby's Movement",
+      value: formatValue(movementAvg, {unit: 'kicks/hr', precision: 0}),
+      trend: formatTrend(percentDelta(movementAvg, movementPrev), '%'),
+      icon: ICONS.movement,
+      color: palette.maternal.peach,
     },
   ];
+
+  const insights: string[] = [];
+  if (hrAvg) {
+    insights.push(
+      hrAvg >= 60 && hrAvg <= 100
+        ? `Heart rate is steady at ${Math.round(hrAvg)} bpm.`
+        : `Heart rate averaged ${Math.round(
+            hrAvg,
+          )} bpm. Share this with your doctor.`,
+    );
+  }
+  if (spoAvg) {
+    insights.push(
+      spoAvg >= 95
+        ? 'Oxygen saturation stayed in the optimal range.'
+        : 'Oxygen saturation dipped below 95%. Stay hydrated and follow up if it persists.',
+    );
+  }
+  if (movementAvg) {
+    insights.push(
+      `Baby movement averaged ${Math.round(
+        movementAvg,
+      )} kicks/hr this week. Track any noticeable changes.`,
+    );
+  }
+  if (latestWeek.length >= 5) {
+    insights.push(
+      `Great consistency! You recorded ${latestWeek.length} readings in the last few days.`,
+    );
+  }
+  if (!insights.length) {
+    insights.push(
+      'Add new readings to unlock personalised pregnancy insights.',
+    );
+  }
+
+  const ascending = [...readings].sort(
+    (a, b) =>
+      new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+  const bucketSize = Math.max(1, Math.ceil(ascending.length / 3));
+  const trimesterLabels: Array<{
+    trimester: string;
+    weeks: string;
+    icon: string;
+    color: string;
+  }> = [
+    {
+      trimester: 'First Trimester',
+      weeks: 'Weeks 1-12',
+      icon: ICONS.heart,
+      color: palette.maternal.mint,
+    },
+    {
+      trimester: 'Second Trimester',
+      weeks: 'Weeks 13-27',
+      icon: ICONS.bp,
+      color: palette.maternal.peach,
+    },
+    {
+      trimester: 'Third Trimester',
+      weeks: 'Weeks 28-40',
+      icon: ICONS.movement,
+      color: palette.maternal.blush,
+    },
+  ];
+
+  const trimester = trimesterLabels.map((meta, index, arr) => {
+    const slice = ascending.slice(index * bucketSize, (index + 1) * bucketSize);
+    const hr = average(slice.map(item => item.heartRate));
+    const sys = average(slice.map(item => item.systolic));
+    const dia = average(slice.map(item => item.diastolic));
+    const movement = average(slice.map(item => item.babyMovement));
+    const stress = average(slice.map(item => item.stressLevel));
+
+    const readingStatus = (
+      value: number | null,
+      healthyRange: [number, number],
+    ) => {
+      if (value == null) {
+        return 'Upcoming';
+      }
+      return value >= healthyRange[0] && value <= healthyRange[1]
+        ? 'Normal'
+        : 'Watch';
+    };
+
+    return {
+      ...meta,
+      readings: [
+        {
+          label: 'Avg Heart Rate',
+          value: formatValue(hr, {unit: 'bpm'}),
+          status: readingStatus(hr, [60, 100]),
+        },
+        {
+          label: 'Avg Blood Pressure',
+          value:
+            sys && dia
+              ? `${Math.round(sys)}/${Math.round(dia)}`
+              : '--/--',
+          status:
+            sys && dia && sys < 130 && dia < 80
+              ? 'Normal'
+              : sys && dia
+              ? 'Watch'
+              : 'Upcoming',
+        },
+        {
+          label: 'Baby Movement',
+          value: formatValue(movement, {unit: 'kicks/hr'}),
+          status: movement ? 'Normal' : 'Upcoming',
+        },
+        {
+          label: 'Stress Level',
+          value: formatValue(stress, {unit: '%'}),
+          status: stress ? 'Normal' : 'Upcoming',
+        },
+      ],
+      notes: slice.length
+        ? `Based on ${slice.length} readings captured during this stage.`
+        : 'Awaiting readings for this stage.',
+      current: index === arr.length - 1,
+    };
+  });
+
+  return {
+    metrics,
+    insights,
+    trimester,
+  };
+};
+
+const AnalyticsScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const firebaseHealth = useFirebaseHealth();
+  const [readings, setReadings] = useState<HealthReading[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchReadings = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const result = await firebaseHealth.getHealthReadings(120);
+        if (mounted) {
+          setReadings(result ?? []);
+        }
+      } catch (err) {
+        console.warn('[Analytics] Failed to load readings', err);
+        if (mounted) {
+          setError('Unable to load latest readings. Try syncing again shortly.');
+        }
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+    fetchReadings();
+    const unsubscribe =
+      firebaseHealth.onHealthReadingsChange?.((latest: HealthReading[]) => {
+        setReadings(latest ?? []);
+      }) ?? (() => {});
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, [firebaseHealth]);
+
+  const {metrics, insights, trimester} = useMemo(
+    () => buildAnalyticsSummary(readings),
+    [readings],
+  );
+  const hasData = readings.length > 0;
 
   return (
     <View style={[styles.container, {paddingTop: insets.top}]}>
       <ScrollView
         style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}>
-        
-        {/* Health Metrics Grid */}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Health Analytics</Text>
+          <Text style={styles.sectionSubtitle}>
+            {hasData
+              ? 'Summarised from your latest LifeBand sync.'
+              : 'Connect your LifeBand to populate these cards.'}
+          </Text>
+          {loading ? (
+            <View style={styles.loaderRow}>
+              <ActivityIndicator color={palette.primary} size="small" />
+              <Text style={styles.loaderRowText}>Updating metrics�</Text>
+            </View>
+          ) : null}
+          {error ? (
+            <View style={styles.statusBanner}>
+              <Text style={styles.statusText}>{error}</Text>
+            </View>
+          ) : null}
           <View style={styles.metricsGrid}>
-            {healthMetrics.map((metric, index) => (
+            {metrics.map(metric => (
               <TouchableOpacity
-                key={index}
-                style={[styles.metricCard, {borderLeftColor: metric.color}]}>
+                key={metric.title}
+                style={[styles.metricCard, {borderLeftColor: metric.color}]}
+                activeOpacity={0.9}>
                 <View style={styles.metricHeader}>
                   <Text style={styles.metricIcon}>{metric.icon}</Text>
                   <Text style={styles.metricTitle}>{metric.title}</Text>
                 </View>
                 <Text style={styles.metricValue}>{metric.value}</Text>
-                <Text style={[styles.metricTrend, {color: metric.color}]}>
-                  {metric.trend}
-                </Text>
+                <Text style={styles.metricTrend}>{metric.trend}</Text>
               </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Trimester-wise Analysis */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>📊 Trimester-wise Analysis</Text>
-          <Text style={styles.sectionSubtitle}>
-            Track your pregnancy journey across all three trimesters
-          </Text>
-          <View style={styles.trimesterContainer}>
-            {trimesterData.map((trimester, index) => (
-              <View 
-                key={index} 
-                style={[
-                  styles.trimesterCard,
-                  trimester.current && styles.trimesterCardCurrent,
-                  {borderTopColor: trimester.color}
-                ]}>
-                <View style={styles.trimesterHeader}>
-                  <Text style={styles.trimesterIcon}>{trimester.icon}</Text>
-                  <View style={styles.trimesterTitleContainer}>
-                    <View style={styles.trimesterTitleRow}>
-                      <Text style={styles.trimesterTitle}>{trimester.trimester}</Text>
-                      {trimester.current && (
-                        <View style={styles.currentBadge}>
-                          <Text style={styles.currentBadgeText}>Current</Text>
-                        </View>
-                      )}
-                    </View>
-                    <Text style={styles.trimesterWeeks}>{trimester.weeks}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.readingsContainer}>
-                  {trimester.readings.map((reading, idx) => (
-                    <View key={idx} style={styles.readingRow}>
-                      <Text style={styles.readingLabel}>{reading.label}</Text>
-                      <View style={styles.readingValueContainer}>
-                        <Text style={styles.readingValue}>{reading.value}</Text>
-                        <Text 
-                          style={[
-                            styles.readingStatus,
-                            reading.status === 'Normal' || reading.status === 'Healthy' || reading.status === 'Active' || reading.status === 'Complete' || reading.status === 'On Track'
-                              ? styles.statusGood
-                              : styles.statusNeutral
-                          ]}>
-                          {reading.status}
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-
-                <View style={styles.notesContainer}>
-                  <Text style={styles.notesIcon}>📝</Text>
-                  <Text style={styles.notesText}>{trimester.notes}</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        </View>
-
-        {/* Weekly Insights */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Weekly Insights</Text>
           <View style={styles.insightsContainer}>
-            {weeklyInsights.map((insight, index) => (
-              <View key={index} style={styles.insightCard}>
-                <Text style={styles.insightIcon}>💡</Text>
+            {insights.map((insight, index) => (
+              <View key={`${insight}-${index}`} style={styles.insightCard}>
+                <Text style={styles.insightIcon}>?</Text>
                 <Text style={styles.insightText}>{insight}</Text>
               </View>
             ))}
           </View>
         </View>
 
-        {/* Charts Placeholder */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Detailed Charts</Text>
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Heart Rate Over Time</Text>
-            <View style={styles.chartPlaceholder}>
-              <Text style={styles.chartPlaceholderText}>
-                📈 Interactive chart coming soon
-              </Text>
-            </View>
-          </View>
-          
-          <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>Baby Movement Patterns</Text>
-            <View style={styles.chartPlaceholder}>
-              <Text style={styles.chartPlaceholderText}>
-                📊 Movement tracking chart coming soon
-              </Text>
-            </View>
+          <Text style={styles.sectionTitle}>Trimester Overview</Text>
+          <Text style={styles.sectionSubtitle}>
+            {hasData
+              ? 'Comparing averages across your recorded readings.'
+              : 'We will populate this view once readings are available.'}
+          </Text>
+          <View style={styles.trimesterContainer}>
+            {trimester.map(card => (
+              <View
+                key={card.trimester}
+                style={[
+                  styles.trimesterCard,
+                  card.current && styles.trimesterCardCurrent,
+                  {borderTopColor: card.color},
+                ]}>
+                <View style={styles.trimesterHeader}>
+                  <Text style={styles.trimesterIcon}>{card.icon}</Text>
+                  <View style={styles.trimesterTitleContainer}>
+                    <View style={styles.trimesterTitleRow}>
+                      <Text style={styles.trimesterTitle}>{card.trimester}</Text>
+                      {card.current ? (
+                        <View style={styles.currentBadge}>
+                          <Text style={styles.currentBadgeText}>Current</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={styles.trimesterWeeks}>{card.weeks}</Text>
+                  </View>
+                </View>
+
+                <View style={styles.readingsContainer}>
+                  {card.readings.map(reading => {
+                    const statusStyle =
+                      reading.status === 'Normal'
+                        ? styles.statusGood
+                        : reading.status === 'Watch'
+                        ? styles.statusWarning
+                        : styles.statusNeutral;
+                    return (
+                      <View key={reading.label} style={styles.readingRow}>
+                        <Text style={styles.readingLabel}>{reading.label}</Text>
+                        <View style={styles.readingValueContainer}>
+                          <Text style={styles.readingValue}>{reading.value}</Text>
+                          <Text style={[styles.readingStatus, statusStyle]}>
+                            {reading.status}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.notesContainer}>
+                  <Text style={styles.notesIcon}>??</Text>
+                  <Text style={styles.notesText}>{card.notes}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         </View>
 
-        {/* Export Options */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Export & Share</Text>
-          <View style={styles.exportContainer}>
-            <TouchableOpacity style={styles.exportButton}>
-              <Text style={styles.exportIcon}>📄</Text>
-              <Text style={styles.exportText}>Export PDF Report</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.exportButton}>
-              <Text style={styles.exportIcon}>📊</Text>
-              <Text style={styles.exportText}>Share with Doctor</Text>
-            </TouchableOpacity>
-          </View>
+        <View style={[styles.section, styles.exportContainer]}>
+          <TouchableOpacity style={styles.exportButton} activeOpacity={0.85}>
+            <Text style={styles.exportIcon}>??</Text>
+            <Text style={styles.exportText}>Export weekly report</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.exportButton} activeOpacity={0.85}>
+            <Text style={styles.exportIcon}>??</Text>
+            <Text style={styles.exportText}>Share with doctor</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </View>
@@ -270,7 +597,35 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: palette.textPrimary,
+    marginBottom: spacing.sm,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: palette.textSecondary,
     marginBottom: spacing.md,
+    lineHeight: 20,
+  },
+  loaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  loaderRowText: {
+    marginLeft: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  statusBanner: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.warning,
+    backgroundColor: 'rgba(249, 171, 0, 0.12)',
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  statusText: {
+    fontSize: 12,
+    color: palette.warning,
   },
   metricsGrid: {
     flexDirection: 'row',
@@ -342,33 +697,6 @@ const styles = StyleSheet.create({
     color: palette.textPrimary,
     lineHeight: 20,
   },
-  chartCard: {
-    backgroundColor: palette.surface,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  chartTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: palette.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  chartPlaceholder: {
-    height: 150,
-    backgroundColor: palette.background,
-    borderRadius: radii.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: palette.border,
-  },
-  chartPlaceholderText: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    textAlign: 'center',
-  },
   exportContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -390,13 +718,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: palette.textOnPrimary,
     textAlign: 'center',
-  },
-  // Trimester section styles
-  sectionSubtitle: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    marginBottom: spacing.md,
-    lineHeight: 20,
   },
   trimesterContainer: {
     gap: spacing.lg,
@@ -503,6 +824,9 @@ const styles = StyleSheet.create({
   },
   statusGood: {
     color: palette.success,
+  },
+  statusWarning: {
+    color: palette.warning,
   },
   statusNeutral: {
     color: palette.textSecondary,

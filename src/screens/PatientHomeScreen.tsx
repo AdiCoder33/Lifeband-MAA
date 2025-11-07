@@ -17,33 +17,12 @@ import {useAppStore} from '../store/useAppStore';
 import {usePatientReadings} from '../hooks/usePatientReadings';
 import DoctorPatientLinkService from '../services/firebase/DoctorPatientLinkService';
 import {LinkedDoctor, MonthlyReportSummary} from '../types/models';
+import {useFirebaseHealth} from '../services/hooks/useFirebaseHealth';
+import type {MedicineEntry} from '../services/firebase/health';
 import {palette, radii, spacing} from '../theme';
 
-const now = Date.now();
-const hour = 60 * 60 * 1000;
 const screenWidth = Dimensions.get('window').width;
 const chartWidth = screenWidth - 80; // Account for padding and margins
-
-const demoHeartTrend = new Array(6).fill(0).map((_, index) => ({
-  x: new Date(now - (5 - index) * hour),
-  y: 72 + index * 3 - (index % 2 === 0 ? 2 : 0),
-}));
-
-const demoSpO2Trend = new Array(6).fill(0).map((_, index) => ({
-  x: new Date(now - (5 - index) * hour),
-  y: 96 + (index % 3 === 0 ? 1 : 0),
-}));
-
-const demoBloodPressure = new Array(6).fill(0).map((_, index) => ({
-  x: new Date(now - (5 - index) * hour),
-  systolic: 120 + (index % 2 === 0 ? 2 : -2),
-  diastolic: 78 + (index % 2 === 0 ? -1 : 1),
-}));
-
-const demoBabyMovement = new Array(6).fill(0).map((_, index) => ({
-  x: new Date(now - (5 - index) * hour),
-  y: 30 + index * 2,
-}));
 
 export const PatientHomeScreen: React.FC = () => {
   const navigation = useNavigation();
@@ -55,22 +34,10 @@ export const PatientHomeScreen: React.FC = () => {
   });
   const latest = readings[0];
   const [isConnected, setIsConnected] = useState(true);
-  const [medicineReminders, setMedicineReminders] = useState([
-    {
-      id: '1',
-      name: 'Folic Acid',
-      time: '9:00 AM daily',
-      doctor: 'Dr. Sarah',
-      taken: false,
-    },
-    {
-      id: '2',
-      name: 'Iron Supplements',
-      time: '7:00 PM daily',
-      doctor: 'ASHA Worker Maya',
-      taken: false,
-    },
-  ]);
+  const firebaseHealth = useFirebaseHealth();
+  const [medicineReminders, setMedicineReminders] = useState<MedicineEntry[]>([]);
+  const [medicineLoading, setMedicineLoading] = useState(true);
+  const [medicineError, setMedicineError] = useState<string | null>(null);
   const [careTeamLoading, setCareTeamLoading] = useState(false);
   const [linkedDoctors, setLinkedDoctors] = useState<LinkedDoctor[]>([]);
   const [recentReports, setRecentReports] = useState<MonthlyReportSummary[]>([]);
@@ -97,6 +64,54 @@ export const PatientHomeScreen: React.FC = () => {
   useEffect(() => {
     loadCareTeam();
   }, [loadCareTeam]);
+
+  const loadMedicines = useCallback(async () => {
+    try {
+      setMedicineLoading(true);
+      setMedicineError(null);
+      const meds = await firebaseHealth.getMedicines();
+      setMedicineReminders(meds ?? []);
+    } catch (err) {
+      console.warn('[PatientHome] Failed to load medicines', err);
+      setMedicineError('Unable to load medicine reminders right now.');
+    } finally {
+      setMedicineLoading(false);
+    }
+  }, [firebaseHealth]);
+
+  useEffect(() => {
+    loadMedicines();
+  }, [loadMedicines]);
+
+  const handleDoseToggle = useCallback(
+    async (medicineId: string, timingIndex = 0) => {
+      const target = medicineReminders.find(med => med.id === medicineId);
+      if (!target) {
+        return;
+      }
+      const totalDoses = Math.max(target.timings?.length ?? 0, 1);
+      const nextState =
+        target.takenToday && target.takenToday.length === totalDoses
+          ? [...target.takenToday]
+          : Array(totalDoses).fill(false);
+      nextState[timingIndex] = !nextState[timingIndex];
+
+      try {
+        await firebaseHealth.updateMedicineStatus(medicineId, nextState);
+        setMedicineReminders(prev =>
+          prev.map(med =>
+            med.id === medicineId ? {...med, takenToday: nextState} : med,
+          ),
+        );
+      } catch (err) {
+        Alert.alert(
+          'Unable to update',
+          err instanceof Error ? err.message : 'Please try again later.',
+        );
+      }
+    },
+    [firebaseHealth, medicineReminders],
+  );
 
   const handleScanForBands = () => {
     Alert.alert(
@@ -141,14 +156,6 @@ export const PatientHomeScreen: React.FC = () => {
     );
   };
 
-  const handleMedicineTaken = (medicineId: string) => {
-    setMedicineReminders(prev =>
-      prev.map(med =>
-        med.id === medicineId ? {...med, taken: !med.taken} : med
-      )
-    );
-    Alert.alert('Medicine Reminder', 'Marked as taken! Great job staying healthy! 💊');
-  };
 
   const summary = useMemo(
     () => ({
@@ -166,37 +173,52 @@ export const PatientHomeScreen: React.FC = () => {
 
   const hasLiveData = readings.length > 0;
 
-  const heartSeries = hasLiveData
-    ? readings
+  const heartSeries = useMemo(
+    () =>
+      readings
+        .filter(item => typeof item.heartRate === 'number')
         .slice(0, 12)
-        .map(item => ({x: new Date(item.timestamp), y: item.heartRate}))
-        .reverse()
-    : demoHeartTrend;
+        .map(item => ({x: new Date(item.timestamp), y: item.heartRate as number}))
+        .reverse(),
+    [readings],
+  );
 
-  const spo2Series = hasLiveData
-    ? readings
+  const spo2Series = useMemo(
+    () =>
+      readings
+        .filter(item => typeof item.spo2 === 'number')
         .slice(0, 12)
-        .map(item => ({x: new Date(item.timestamp), y: item.spo2}))
-        .reverse()
-    : demoSpO2Trend;
+        .map(item => ({x: new Date(item.timestamp), y: item.spo2 as number}))
+        .reverse(),
+    [readings],
+  );
 
-  const bloodPressureSeries = hasLiveData
-    ? readings
+  const bloodPressureSeries = useMemo(
+    () =>
+      readings
+        .filter(
+          item =>
+            typeof item.systolic === 'number' && typeof item.diastolic === 'number',
+        )
         .slice(0, 12)
         .map(item => ({
           x: new Date(item.timestamp),
-          systolic: item.systolic,
-          diastolic: item.diastolic,
+          systolic: item.systolic as number,
+          diastolic: item.diastolic as number,
         }))
-        .reverse()
-    : demoBloodPressure;
+        .reverse(),
+    [readings],
+  );
 
-  const babyMovementSeries = hasLiveData
-    ? readings
+  const babyMovementSeries = useMemo(
+    () =>
+      readings
+        .filter(item => typeof item.babyMovement === 'number')
         .slice(0, 12)
-        .map(item => ({x: new Date(item.timestamp), y: item.babyMovement}))
-        .reverse()
-    : demoBabyMovement;
+        .map(item => ({x: new Date(item.timestamp), y: item.babyMovement as number}))
+        .reverse(),
+    [readings],
+  );
 
   const handleManageCareTeam = useCallback(() => {
     (navigation as any).navigate('LinkDoctor');
@@ -339,29 +361,93 @@ export const PatientHomeScreen: React.FC = () => {
         {/* Medicine Reminders Section */}
         <View style={styles.medicineSection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>💊 Medicine Reminders</Text>
-            <Text style={styles.sectionSubtitle}>Prescribed by your care team</Text>
+            <Text style={styles.sectionTitle}>Medicine Reminders</Text>
+            <Text style={styles.sectionSubtitle}>
+              {medicineLoading
+                ? 'Fetching the latest schedule...'
+                : 'Prescribed by your care team'}
+            </Text>
           </View>
           <View style={styles.medicineList}>
-            {medicineReminders.map((medicine) => (
-              <View key={medicine.id} style={styles.medicineItem}>
-                <View style={styles.medicineInfo}>
-                  <Text style={styles.medicineName}>{medicine.name}</Text>
-                  <Text style={styles.medicineTime}>Take at {medicine.time}</Text>
-                  <Text style={styles.medicineDoctor}>Prescribed by {medicine.doctor}</Text>
-                </View>
-                <TouchableOpacity 
-                  style={[
-                    styles.takenButton, 
-                    medicine.taken && {backgroundColor: palette.success, opacity: 0.7}
-                  ]} 
-                  onPress={() => handleMedicineTaken(medicine.id)}>
-                  <Text style={styles.takenButtonText}>
-                    {medicine.taken ? '✓ Taken' : 'Mark Taken'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ))}
+            {medicineLoading ? (
+              <ActivityIndicator
+                color={palette.primary}
+                style={styles.medicineLoader}
+              />
+            ) : null}
+            {medicineError ? (
+              <Text style={styles.medicineError}>{medicineError}</Text>
+            ) : null}
+            {!medicineLoading && !medicineReminders.length ? (
+              <Text style={styles.medicineEmpty}>
+                No reminders yet. Your prescriptions will appear here.
+              </Text>
+            ) : (
+              medicineReminders.map(medicine => {
+                const timings =
+                  medicine.timings && medicine.timings.length
+                    ? medicine.timings
+                    : ['Scheduled dose'];
+                const doseStates =
+                  medicine.takenToday &&
+                  medicine.takenToday.length === timings.length
+                    ? medicine.takenToday
+                    : Array(timings.length).fill(false);
+                return (
+                  <View key={medicine.id} style={styles.medicineItem}>
+                    <View style={styles.medicineInfo}>
+                      <Text style={styles.medicineName}>
+                        {medicine.medicineName}
+                      </Text>
+                      <Text style={styles.medicineTime}>
+                        {timings.length > 1
+                          ? `Take at ${timings.join(', ')}`
+                          : `Take at ${timings[0]}`}
+                      </Text>
+                      {medicine.prescribedBy ? (
+                        <Text style={styles.medicineDoctor}>
+                          Prescribed by {medicine.prescribedBy}
+                        </Text>
+                      ) : null}
+                      {medicine.notes ? (
+                        <Text style={styles.medicineNotes}>
+                          {medicine.notes}
+                        </Text>
+                      ) : null}
+                    </View>
+                    <View style={styles.doseRow}>
+                      {timings.map((time, index) => {
+                        const taken = doseStates[index];
+                        return (
+                          <TouchableOpacity
+                            key={`${medicine.id}-${index}`}
+                            style={[
+                              styles.doseChip,
+                              taken && styles.doseChipTaken,
+                            ]}
+                            onPress={() => handleDoseToggle(medicine.id, index)}>
+                            <Text
+                              style={[
+                                styles.doseChipLabel,
+                                taken && styles.doseChipLabelTaken,
+                              ]}>
+                              {time}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.doseChipSubLabel,
+                                taken && styles.doseChipLabelTaken,
+                              ]}>
+                              {taken ? 'Taken' : 'Tap to mark'}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
         </View>
 
@@ -372,12 +458,12 @@ export const PatientHomeScreen: React.FC = () => {
           </View>
           <View style={styles.heroInsights}>
             <Text style={styles.heroBadge}>
-              {hasLiveData ? 'Live data' : 'Demo data preview'}
+              {hasLiveData ? 'Live data' : 'Awaiting readings'}
             </Text>
             <Text style={styles.heroCopy}>
               {hasLiveData
                 ? 'These metrics reflect your latest LifeBand sync.'
-                : 'Connect your LifeBand to replace demo visuals with actual readings.'}
+                : 'Connect your LifeBand to start building your health timeline.'}
             </Text>
           </View>
         </View>
@@ -387,13 +473,13 @@ export const PatientHomeScreen: React.FC = () => {
             label="Heart Rate"
             value={summary.heartRate}
             unit="bpm"
-            trend={hasLiveData ? 'steady' : 'up'}
+            trend="steady"
           />
           <ReadingTile
             label="SpO2"
             value={summary.spo2}
             unit="%"
-            trend={hasLiveData ? 'steady' : 'down'}
+            trend="steady"
           />
         </View>
         <View style={styles.tilesRow}>
@@ -405,14 +491,14 @@ export const PatientHomeScreen: React.FC = () => {
                 : null
             }
             unit="mmHg"
-            trend={hasLiveData ? 'steady' : 'up'}
+            trend="steady"
             variant="secondary"
           />
           <ReadingTile
             label="Temperature"
             value={summary.temperature}
             unit="°C"
-            trend={hasLiveData ? 'steady' : 'up'}
+            trend="steady"
             variant="secondary"
           />
         </View>
@@ -421,63 +507,66 @@ export const PatientHomeScreen: React.FC = () => {
             label="Baby's Movement"
             value={summary.babyMovement}
             unit="movements/hr"
-            trend={hasLiveData ? 'steady' : 'up'}
+            trend="steady"
           />
           <ReadingTile
             label="Mother's Stress Level"
             value={summary.stressLevel}
             unit="%"
-            trend={hasLiveData ? 'steady' : 'down'}
+            trend="steady"
           />
         </View>
 
         <View style={styles.chartRow}>
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>💓 Heart Rate Trend</Text>
+            <Text style={styles.chartTitle}>Heart Rate Trend</Text>
             <Text style={styles.chartSubtitle}>Your baby's heartbeat rhythm</Text>
-            <VictoryChart
-              theme={VictoryTheme.material}
-              height={180}
-              width={chartWidth}
-              padding={{top: 16, left: 50, right: 20, bottom: 45}}
-              scale={{x: 'time'}}>
-              <VictoryAxis
-                tickFormat={(value: Date | string | number) =>
-                  new Date(value).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                }
-                style={{
-                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
-                  grid: {stroke: palette.border, strokeWidth: 0.5},
-                }}
-              />
-              <VictoryAxis
-                dependentAxis
-                tickFormat={(value: number) => `${value}`}
-                style={{
-                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
-                  grid: {stroke: palette.border, strokeWidth: 0.5},
-                }}
-              />
-              <VictoryArea
-                interpolation="monotoneX"
-                style={{
-                  data: {fill: palette.maternal.blush + '40', stroke: palette.primary, strokeWidth: 2},
-                }}
-                data={heartSeries}
-              />
-            </VictoryChart>
-            {!hasLiveData ? (
-              <Text style={styles.chartHint}>
-                🔄 Demo preview - Connect LifeBand for real-time monitoring
-              </Text>
-            ) : null}
+            {heartSeries.length ? (
+              <VictoryChart
+                theme={VictoryTheme.material}
+                height={180}
+                width={chartWidth}
+                padding={{top: 16, left: 50, right: 20, bottom: 45}}
+                scale={{x: 'time'}}>
+                <VictoryAxis
+                  tickFormat={(value: Date | string | number) =>
+                    new Date(value).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  }
+                  style={{
+                    tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                    grid: {stroke: palette.border, strokeWidth: 0.5},
+                  }}
+                />
+                <VictoryAxis
+                  dependentAxis
+                  tickFormat={(value: number) => `${value}`}
+                  style={{
+                    tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                    grid: {stroke: palette.border, strokeWidth: 0.5},
+                  }}
+                />
+                <VictoryArea
+                  interpolation="monotoneX"
+                  style={{
+                    data: {fill: palette.maternal.blush + '40', stroke: palette.primary, strokeWidth: 2},
+                  }}
+                  data={heartSeries}
+                />
+              </VictoryChart>
+            ) : (
+              <View style={styles.chartPlaceholder}>
+                <Text style={styles.chartPlaceholderText}>
+                  No heart rate readings yet. Sync your LifeBand to unlock this chart.
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>🫁 Oxygen & Blood Pressure</Text>
+            <Text style={styles.chartTitle}>Oxygen & Blood Pressure</Text>
             <Text style={styles.chartSubtitle}>Your health vitals overview</Text>
             <View style={styles.chartLegend}>
               <View style={styles.legendItem}>
@@ -493,90 +582,102 @@ export const PatientHomeScreen: React.FC = () => {
                 <Text style={styles.legendText}>Diastolic</Text>
               </View>
             </View>
-            <VictoryChart
-              theme={VictoryTheme.material}
-              height={180}
-              width={chartWidth}
-              padding={{top: 16, left: 50, right: 20, bottom: 45}}
-              scale={{x: 'time'}}>
-              <VictoryAxis
-                tickFormat={(value: Date | string | number) =>
-                  new Date(value).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })
-                }
-                style={{
-                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
-                  grid: {stroke: palette.border, strokeWidth: 0.5},
-                }}
-              />
-              <VictoryAxis
-                dependentAxis
-                tickFormat={(value: number) => `${value}`}
-                style={{
-                  tickLabels: {fontSize: 10, fill: palette.textSecondary},
-                  grid: {stroke: palette.border, strokeWidth: 0.5},
-                }}
-              />
-              <VictoryGroup>
-                <VictoryLine
-                  data={spo2Series}
-                  style={{data: {stroke: palette.maternal.mint, strokeWidth: 2}}}
-                  interpolation="monotoneX"
+            {(spo2Series.length || bloodPressureSeries.length) ? (
+              <VictoryChart
+                theme={VictoryTheme.material}
+                height={180}
+                width={chartWidth}
+                padding={{top: 16, left: 50, right: 20, bottom: 45}}
+                scale={{x: 'time'}}>
+                <VictoryAxis
+                  tickFormat={(value: Date | string | number) =>
+                    new Date(value).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })
+                  }
+                  style={{
+                    tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                    grid: {stroke: palette.border, strokeWidth: 0.5},
+                  }}
                 />
-                <VictoryLine
-                  data={bloodPressureSeries.map(item => ({
-                    x: item.x,
-                    y: item.systolic,
-                  }))}
-                  style={{data: {stroke: palette.maternal.peach, strokeWidth: 2}}}
+                <VictoryAxis
+                  dependentAxis
+                  tickFormat={(value: number) => `${value}`}
+                  style={{
+                    tickLabels: {fontSize: 10, fill: palette.textSecondary},
+                    grid: {stroke: palette.border, strokeWidth: 0.5},
+                  }}
                 />
-                <VictoryLine
-                  data={bloodPressureSeries.map(item => ({
-                    x: item.x,
-                    y: item.diastolic,
-                  }))}
-                  style={{data: {stroke: palette.primary, strokeWidth: 2}}}
-                />
-              </VictoryGroup>
-            </VictoryChart>
-            {!hasLiveData ? (
-              <Text style={styles.chartHint}>
-                Demo lines: SpO2 (green) and blood pressure (gold/red) preview.
-              </Text>
-            ) : null}
+                <VictoryGroup>
+                  <VictoryLine
+                    data={spo2Series}
+                    style={{data: {stroke: palette.maternal.mint, strokeWidth: 2}}}
+                    interpolation="monotoneX"
+                  />
+                  <VictoryLine
+                    data={bloodPressureSeries.map(item => ({
+                      x: item.x,
+                      y: item.systolic,
+                    }))}
+                    style={{data: {stroke: palette.maternal.peach, strokeWidth: 2}}}
+                  />
+                  <VictoryLine
+                    data={bloodPressureSeries.map(item => ({
+                      x: item.x,
+                      y: item.diastolic,
+                    }))}
+                    style={{data: {stroke: palette.primary, strokeWidth: 2}}}
+                  />
+                </VictoryGroup>
+              </VictoryChart>
+            ) : (
+              <View style={styles.chartPlaceholder}>
+                <Text style={styles.chartPlaceholderText}>
+                  No SpO2 or blood pressure data yet. Keep your LifeBand connected.
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
         <View style={styles.chartRow}>
           <View style={styles.chartCard}>
-            <Text style={styles.chartTitle}>🤰 Baby Movement Trend</Text>
+            <Text style={styles.chartTitle}>Baby Movement Trend</Text>
             <Text style={styles.chartSubtitle}>Track your baby's activity over time</Text>
-            <VictoryChart
-              theme={VictoryTheme.material}
-              height={180}
-              width={chartWidth}
-              padding={{top: 16, left: 50, right: 20, bottom: 45}}
-              scale={{x: 'time'}}>
-              <VictoryAxis
-                dependentAxis
-                style={{
-                  axis: {stroke: palette.border},
-                  grid: {stroke: palette.border, strokeDasharray: '4'},
-                }}
-              />
-              <VictoryAxis
-                style={{
-                  axis: {stroke: palette.border},
-                  grid: {stroke: 'transparent'},
-                }}
-              />
-              <VictoryLine
-                data={hasLiveData ? babyMovementSeries : demoBabyMovement}
-                style={{data: {stroke: palette.primary, strokeWidth: 2}}}
-              />
-            </VictoryChart>
+            {babyMovementSeries.length ? (
+              <VictoryChart
+                theme={VictoryTheme.material}
+                height={180}
+                width={chartWidth}
+                padding={{top: 16, left: 50, right: 20, bottom: 45}}
+                scale={{x: 'time'}}>
+                <VictoryAxis
+                  dependentAxis
+                  style={{
+                    axis: {stroke: palette.border},
+                    grid: {stroke: palette.border, strokeDasharray: '4'},
+                  }}
+                />
+                <VictoryAxis
+                  style={{
+                    axis: {stroke: palette.border},
+                    grid: {stroke: 'transparent'},
+                  }}
+                />
+                <VictoryLine
+                  data={babyMovementSeries}
+                  style={{data: {stroke: palette.primary, strokeWidth: 2}}}
+                  interpolation="monotoneX"
+                />
+              </VictoryChart>
+            ) : (
+              <View style={styles.chartPlaceholder}>
+                <Text style={styles.chartPlaceholderText}>
+                  Capture baby movement readings to view this trend.
+                </Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -687,6 +788,22 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     marginBottom: spacing.md,
   },
+  chartPlaceholder: {
+    height: 160,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: palette.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+    backgroundColor: palette.background,
+  },
+  chartPlaceholderText: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    textAlign: 'center',
+  },
   chartLegend: {
     flexDirection: 'row',
     justifyContent: 'space-around',
@@ -707,11 +824,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: palette.textSecondary,
     fontWeight: '600',
-  },
-  chartHint: {
-    marginTop: spacing.sm,
-    fontSize: 12,
-    color: palette.textSecondary,
   },
   carePlanCard: {
     marginTop: spacing.xl,
@@ -835,14 +947,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   medicineItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     backgroundColor: palette.backgroundSoft,
     padding: spacing.md,
-    borderRadius: radii.md,
-    borderLeftWidth: 4,
-    borderLeftColor: palette.accent,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
   medicineInfo: {
     flex: 1,
@@ -863,16 +972,52 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     fontStyle: 'italic',
   },
-  takenButton: {
-    backgroundColor: palette.success,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
+  medicineNotes: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    marginTop: spacing.xs,
   },
-  takenButtonText: {
-    color: palette.textOnPrimary,
-    fontWeight: '600',
-    fontSize: 14,
+  medicineLoader: {
+    marginBottom: spacing.sm,
+  },
+  medicineError: {
+    color: palette.danger,
+    fontSize: 12,
+    marginBottom: spacing.sm,
+  },
+  medicineEmpty: {
+    fontSize: 13,
+    color: palette.textSecondary,
+    fontStyle: 'italic',
+  },
+  doseRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  doseChip: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  doseChipTaken: {
+    borderColor: palette.success,
+    backgroundColor: palette.success + '22',
+  },
+  doseChipLabel: {
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  doseChipLabelTaken: {
+    color: palette.success,
+  },
+  doseChipSubLabel: {
+    fontSize: 11,
+    color: palette.textSecondary,
   },
   // Enhanced scan button styles
   connectionSubtitle: {
@@ -1110,3 +1255,9 @@ const styles = StyleSheet.create({
 });
 
 export default PatientHomeScreen;
+
+
+
+
+
+

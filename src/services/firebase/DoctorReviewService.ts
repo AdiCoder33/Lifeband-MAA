@@ -132,6 +132,21 @@ class DoctorReviewService {
       {merge: true},
     );
   }
+
+  static async listRecentReviews(
+    doctorId: string,
+    limit = 10,
+  ): Promise<DoctorReview[]> {
+    const snapshot = await reviewsCollection()
+      .where('doctorId', '==', doctorId)
+      .orderBy('createdAt', 'desc')
+      .limit(limit)
+      .get();
+
+    return snapshot.docs
+      .map(mapReview)
+      .filter(review => review.status !== 'archived');
+  }
 }
 
 export default DoctorReviewService;

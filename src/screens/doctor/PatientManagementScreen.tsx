@@ -1,411 +1,330 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-  TouchableOpacity,
   TextInput,
-  Modal,
-  Alert,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import {palette, spacing, radii} from '../../theme';
+import {palette, radii, spacing} from '../../theme';
+import {useLinkedPatientsQuery} from '../../features/doctor/queries';
+import type {LinkedPatient} from '../../types/models';
 
-type Patient = {
-  id: string;
-  name: string;
-  age: number;
-  gender: 'male' | 'female' | 'other';
-  condition: string;
-  lastVisit: string;
-  nextAppointment?: string;
-  priority: 'high' | 'medium' | 'low';
-  status: 'active' | 'inactive' | 'discharged';
-  phone: string;
-  email?: string;
-  medicalRecord: string;
+type PatientPriority = 'low' | 'medium' | 'high';
+type PatientStatus = LinkedPatient['status'];
+
+const STATUS_FILTERS: Array<'all' | PatientStatus> = [
+  'all',
+  'active',
+  'pending',
+  'revoked',
+];
+
+const priorityColor = (priority: PatientPriority) => {
+  switch (priority) {
+    case 'high':
+      return palette.danger;
+    case 'medium':
+      return palette.warning;
+    default:
+      return palette.success;
+  }
+};
+
+const statusColor = (status: PatientStatus) => {
+  switch (status) {
+    case 'active':
+      return palette.success;
+    case 'pending':
+      return palette.warning;
+    case 'revoked':
+    default:
+      return palette.textSecondary;
+  }
+};
+
+const titleCase = (value: string) =>
+  value.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+
+const parseDate = (value?: string) => {
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const computePriority = (patient: LinkedPatient): PatientPriority => {
+  const lastReading = parseDate(patient.lastReadingAt);
+  if (!lastReading) {
+    return 'high';
+  }
+  const diffDays =
+    (Date.now() - lastReading.getTime()) / (1000 * 60 * 60 * 24);
+  if (diffDays > 14) {
+    return 'high';
+  }
+  if (diffDays > 7) {
+    return 'medium';
+  }
+  return 'low';
+};
+
+const formatDate = (value?: string) => {
+  const parsed = parseDate(value);
+  if (!parsed) {
+    return '—';
+  }
+  return parsed.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
 };
 
 const PatientManagementScreen: React.FC = () => {
-  const [patients, setPatients] = useState<Patient[]>([
-    {
-      id: '1',
-      name: 'Sarah Johnson',
-      age: 28,
-      gender: 'female',
-      condition: 'Pregnancy - 24 weeks',
-      lastVisit: '2024-10-10',
-      nextAppointment: '2024-10-20',
-      priority: 'medium',
-      status: 'active',
-      phone: '+1-555-0123',
-      email: 'sarah.j@email.com',
-      medicalRecord: 'MR001234',
-    },
-    {
-      id: '2',
-      name: 'Emily Davis',
-      age: 32,
-      gender: 'female',
-      condition: 'Postpartum checkup',
-      lastVisit: '2024-10-12',
-      nextAppointment: '2024-11-12',
-      priority: 'low',
-      status: 'active',
-      phone: '+1-555-0456',
-      medicalRecord: 'MR001235',
-    },
-    {
-      id: '3',
-      name: 'Maria Rodriguez',
-      age: 35,
-      gender: 'female',
-      condition: 'High-risk pregnancy',
-      lastVisit: '2024-10-13',
-      nextAppointment: '2024-10-15',
-      priority: 'high',
-      status: 'active',
-      phone: '+1-555-0789',
-      medicalRecord: 'MR001236',
-    },
-  ]);
-
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [showPatientModal, setShowPatientModal] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [statusFilter, setStatusFilter] =
+    useState<'all' | PatientStatus>('all');
+  const [selectedPatient, setSelectedPatient] = useState<LinkedPatient | null>(
+    null,
+  );
+  const [showModal, setShowModal] = useState(false);
+  const {data = [], isLoading, isFetching} = useLinkedPatientsQuery();
 
-  const filteredPatients = patients.filter(patient => {
-    const matchesSearch = patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         patient.condition.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         patient.medicalRecord.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesFilter = filterStatus === 'all' || patient.status === filterStatus;
-    
-    return matchesSearch && matchesFilter;
-  });
+  const decoratedPatients = useMemo(() => {
+    return data.map(patient => ({
+      ...patient,
+      priority: computePriority(patient),
+    }));
+  }, [data]);
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return palette.danger;
-      case 'medium':
-        return palette.warning;
-      case 'low':
-        return palette.success;
-      default:
-        return palette.textSecondary;
-    }
-  };
+  const filteredPatients = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase();
+    return decoratedPatients.filter(patient => {
+      const matchesStatus =
+        statusFilter === 'all' || patient.status === statusFilter;
+      const matchesSearch =
+        !search ||
+        patient.patientName.toLowerCase().includes(search) ||
+        patient.patientId.toLowerCase().includes(search);
+      return matchesStatus && matchesSearch;
+    });
+  }, [decoratedPatients, searchQuery, statusFilter]);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return palette.success;
-      case 'inactive':
-        return palette.warning;
-      case 'discharged':
-        return palette.textSecondary;
-      default:
-        return palette.textSecondary;
-    }
-  };
+  const stats = useMemo(() => {
+    const active = decoratedPatients.filter(p => p.status === 'active').length;
+    const pending = decoratedPatients.filter(p => p.status === 'pending').length;
+    return {
+      total: decoratedPatients.length,
+      active,
+      pending,
+    };
+  }, [decoratedPatients]);
 
-  const viewPatientDetails = (patient: Patient) => {
+  const firstLoad = isLoading && data.length === 0;
+
+  const openPatient = (patient: LinkedPatient) => {
     setSelectedPatient(patient);
-    setShowPatientModal(true);
+    setShowModal(true);
   };
 
-  const callPatient = (phone: string, name: string) => {
+  const callPatient = (patient: LinkedPatient) => {
     Alert.alert(
-      `Call ${name}?`,
-      `Do you want to call ${phone}?`,
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {text: 'Call', onPress: () => {
-          // In a real app, this would open the phone dialer
-          Alert.alert('Calling...', `Calling ${name} at ${phone}`);
-        }},
-      ]
+      'Contact not available',
+      `Ask ${patient.patientName} to add contact details in their profile.`,
     );
   };
-
-  const scheduleAppointment = (patient: Patient) => {
-    Alert.alert(
-      'Schedule Appointment',
-      `Schedule a new appointment for ${patient.name}?`,
-      [
-        {text: 'Cancel', style: 'cancel'},
-        {text: 'Schedule', onPress: () => {
-          Alert.alert('Success', 'Appointment scheduling interface would open here');
-        }},
-      ]
-    );
-  };
-
-  const activePatients = patients.filter(p => p.status === 'active').length;
-  const highPriorityPatients = patients.filter(p => p.priority === 'high').length;
-  const upcomingAppointments = patients.filter(p => p.nextAppointment).length;
 
   return (
     <ScreenBackground>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header Stats */}
-        <View style={styles.statsSection}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{patients.length}</Text>
-            <Text style={styles.statLabel}>Total Patients</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{activePatients}</Text>
-            <Text style={styles.statLabel}>Active Patients</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{highPriorityPatients}</Text>
-            <Text style={styles.statLabel}>High Priority</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{upcomingAppointments}</Text>
-            <Text style={styles.statLabel}>Upcoming Appts</Text>
-          </View>
+      {firstLoad ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator color={palette.primary} size="large" />
+          <Text style={styles.loaderLabel}>Loading patients…</Text>
         </View>
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}>
+          {isFetching && !isLoading ? (
+            <View style={styles.inlineStatus}>
+              <ActivityIndicator color={palette.primary} size="small" />
+              <Text style={styles.inlineStatusLabel}>
+                Syncing latest roster…
+              </Text>
+            </View>
+          ) : null}
 
-        {/* Search and Filter */}
-        <View style={styles.searchSection}>
-          <View style={styles.searchContainer}>
-            <Text style={styles.searchIcon}>🔍</Text>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search patients, conditions, or medical records..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{stats.total}</Text>
+              <Text style={styles.statLabel}>Linked</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={[styles.statValue, {color: palette.success}]}>
+                {stats.active}
+              </Text>
+              <Text style={styles.statLabel}>Active</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={[styles.statValue, {color: palette.warning}]}>
+                {stats.pending}
+              </Text>
+              <Text style={styles.statLabel}>Pending</Text>
+            </View>
           </View>
-          
-          <View style={styles.filterContainer}>
-            {(['all', 'active', 'inactive'] as const).map(status => (
+
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search by patient or ID"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor={palette.textSecondary}
+          />
+
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}>
+            {STATUS_FILTERS.map(filter => (
               <TouchableOpacity
-                key={status}
+                key={filter}
                 style={[
-                  styles.filterButton,
-                  filterStatus === status && styles.selectedFilterButton,
+                  styles.filterChip,
+                  statusFilter === filter && styles.filterChipActive,
                 ]}
-                onPress={() => setFilterStatus(status)}>
+                onPress={() => setStatusFilter(filter)}>
                 <Text
                   style={[
-                    styles.filterButtonText,
-                    filterStatus === status && styles.selectedFilterButtonText,
+                    styles.filterChipLabel,
+                    statusFilter === filter && styles.filterChipLabelActive,
                   ]}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+                  {filter === 'all' ? 'All' : titleCase(filter)}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
-        </View>
-
-        {/* Patient List */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Patient Roster ({filteredPatients.length})</Text>
-            <TouchableOpacity
-              style={styles.addButton}
-              onPress={() => Alert.alert('Add Patient', 'New patient registration form')}>
-              <Text style={styles.addButtonText}>+ Add Patient</Text>
-            </TouchableOpacity>
-          </View>
+          </ScrollView>
 
           {filteredPatients.length === 0 ? (
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>👥</Text>
-              <Text style={styles.emptyStateText}>No patients found</Text>
-              <Text style={styles.emptyStateSubtext}>
-                {searchQuery ? 'Try adjusting your search criteria' : 'Add your first patient to get started'}
+              <Text style={styles.emptyTitle}>No patients yet</Text>
+              <Text style={styles.emptyCopy}>
+                Invite patients using the QR screen to populate this list.
               </Text>
             </View>
           ) : (
             filteredPatients.map(patient => (
-              <View key={patient.id} style={styles.patientCard}>
-                <View style={styles.patientHeader}>
-                  <View style={styles.patientInfo}>
-                    <View style={styles.patientNameRow}>
-                      <Text style={styles.patientName}>{patient.name}</Text>
-                      <View style={styles.badges}>
-                        <View
-                          style={[
-                            styles.priorityBadge,
-                            {backgroundColor: getPriorityColor(patient.priority)},
-                          ]}>
-                          <Text style={styles.badgeText}>
-                            {patient.priority.toUpperCase()}
-                          </Text>
-                        </View>
-                        <View
-                          style={[
-                            styles.statusBadge,
-                            {backgroundColor: getStatusColor(patient.status)},
-                          ]}>
-                          <Text style={styles.badgeText}>
-                            {patient.status.toUpperCase()}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    
-                    <Text style={styles.patientDetails}>
-                      {patient.age} years • {patient.gender} • MR: {patient.medicalRecord}
+              <View key={patient.patientId} style={styles.card}>
+                <View style={styles.cardHeader}>
+                  <View>
+                    <Text style={styles.patientName}>{patient.patientName}</Text>
+                    <Text style={styles.patientMeta}>
+                      ID: {patient.patientId}
                     </Text>
-                    <Text style={styles.patientCondition}>{patient.condition}</Text>
-                    <Text style={styles.patientVisit}>
-                      Last visit: {new Date(patient.lastVisit).toLocaleDateString()}
-                    </Text>
-                    {patient.nextAppointment && (
-                      <Text style={styles.patientNextVisit}>
-                        Next: {new Date(patient.nextAppointment).toLocaleDateString()}
+                  </View>
+                  <View style={styles.badges}>
+                    <View
+                      style={[
+                        styles.badge,
+                        {backgroundColor: statusColor(patient.status)},
+                      ]}>
+                      <Text style={styles.badgeLabel}>
+                        {titleCase(patient.status)}
                       </Text>
-                    )}
+                    </View>
+                    <View
+                      style={[
+                        styles.badge,
+                        {backgroundColor: priorityColor(patient.priority)},
+                      ]}>
+                      <Text style={styles.badgeLabel}>
+                        {titleCase(patient.priority)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-                
-                <View style={styles.patientActions}>
-                  <TouchableOpacity
-                    style={styles.actionButton}
-                    onPress={() => viewPatientDetails(patient)}>
-                    <Text style={styles.actionButtonText}>View</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.callButton]}
-                    onPress={() => callPatient(patient.phone, patient.name)}>
-                    <Text style={[styles.actionButtonText, styles.callButtonText]}>Call</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.scheduleButton]}
-                    onPress={() => scheduleAppointment(patient)}>
-                    <Text style={[styles.actionButtonText, styles.scheduleButtonText]}>
-                      Schedule
+
+                <View style={styles.cardBody}>
+                  <View>
+                    <Text style={styles.label}>Last Reading</Text>
+                    <Text style={styles.value}>
+                      {formatDate(patient.lastReadingAt)}
                     </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.label}>Last Report</Text>
+                    <Text style={styles.value}>
+                      {formatDate(patient.lastReportSubmittedAt)}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.label}>Village</Text>
+                    <Text style={styles.value}>
+                      {patient.village ?? '—'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.primaryAction]}
+                    onPress={() => openPatient(patient)}>
+                    <Text style={styles.primaryActionLabel}>View</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.secondaryAction]}
+                    onPress={() => callPatient(patient)}>
+                    <Text style={styles.secondaryActionLabel}>Call</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             ))
           )}
-        </View>
+        </ScrollView>
+      )}
 
-        {/* Quick Actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
-            <TouchableOpacity
-              style={styles.quickActionCard}
-              onPress={() => Alert.alert('Bulk Actions', 'Bulk patient operations')}>
-              <Text style={styles.quickActionIcon}>📋</Text>
-              <Text style={styles.quickActionTitle}>Bulk Operations</Text>
-              <Text style={styles.quickActionDescription}>
-                Send reminders, update records
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionCard}
-              onPress={() => Alert.alert('Export Data', 'Export patient data')}>
-              <Text style={styles.quickActionIcon}>📊</Text>
-              <Text style={styles.quickActionTitle}>Export Data</Text>
-              <Text style={styles.quickActionDescription}>
-                Generate reports and exports
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionCard}
-              onPress={() => Alert.alert('Patient Alerts', 'View patient alerts and notifications')}>
-              <Text style={styles.quickActionIcon}>🔔</Text>
-              <Text style={styles.quickActionTitle}>Patient Alerts</Text>
-              <Text style={styles.quickActionDescription}>
-                Overdue visits, critical updates
-              </Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={styles.quickActionCard}
-              onPress={() => Alert.alert('Referrals', 'Manage patient referrals')}>
-              <Text style={styles.quickActionIcon}>🏥</Text>
-              <Text style={styles.quickActionTitle}>Referrals</Text>
-              <Text style={styles.quickActionDescription}>
-                Send and track referrals
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </ScrollView>
-
-      {/* Patient Detail Modal */}
       <Modal
-        visible={showPatientModal}
+        visible={showModal}
+        transparent
         animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPatientModal(false)}>
+        onRequestClose={() => setShowModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {selectedPatient && (
-              <>
-                <Text style={styles.modalTitle}>Patient Details</Text>
-                
-                <ScrollView style={styles.modalScroll}>
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Personal Information</Text>
-                    <Text style={styles.modalInfo}>Name: {selectedPatient.name}</Text>
-                    <Text style={styles.modalInfo}>Age: {selectedPatient.age} years</Text>
-                    <Text style={styles.modalInfo}>Gender: {selectedPatient.gender}</Text>
-                    <Text style={styles.modalInfo}>Medical Record: {selectedPatient.medicalRecord}</Text>
-                  </View>
-                  
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Contact Information</Text>
-                    <Text style={styles.modalInfo}>Phone: {selectedPatient.phone}</Text>
-                    {selectedPatient.email && (
-                      <Text style={styles.modalInfo}>Email: {selectedPatient.email}</Text>
-                    )}
-                  </View>
-                  
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>Medical Information</Text>
-                    <Text style={styles.modalInfo}>Condition: {selectedPatient.condition}</Text>
-                    <Text style={styles.modalInfo}>Priority: {selectedPatient.priority}</Text>
-                    <Text style={styles.modalInfo}>Status: {selectedPatient.status}</Text>
-                    <Text style={styles.modalInfo}>
-                      Last Visit: {new Date(selectedPatient.lastVisit).toLocaleDateString()}
-                    </Text>
-                    {selectedPatient.nextAppointment && (
-                      <Text style={styles.modalInfo}>
-                        Next Appointment: {new Date(selectedPatient.nextAppointment).toLocaleDateString()}
-                      </Text>
-                    )}
-                  </View>
-                </ScrollView>
-                
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={() => {
-                      setShowPatientModal(false);
-                      // Navigate to patient detail screen
-                      Alert.alert('Navigate', 'Would navigate to detailed patient view');
-                    }}>
-                    <Text style={styles.modalActionButtonText}>Full Medical Record</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.modalActionButton, styles.modalCloseButton]}
-                    onPress={() => setShowPatientModal(false)}>
-                    <Text style={[styles.modalActionButtonText, styles.modalCloseButtonText]}>
-                      Close
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {selectedPatient?.patientName ?? 'Patient'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              Status: {selectedPatient ? titleCase(selectedPatient.status) : '—'}
+            </Text>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>Linked on</Text>
+              <Text style={styles.modalValue}>
+                {formatDate(selectedPatient?.linkedAt)}
+              </Text>
+            </View>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>Last Reading</Text>
+              <Text style={styles.modalValue}>
+                {formatDate(selectedPatient?.lastReadingAt)}
+              </Text>
+            </View>
+            <View style={styles.modalRow}>
+              <Text style={styles.modalLabel}>Village</Text>
+              <Text style={styles.modalValue}>
+                {selectedPatient?.village ?? '—'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalClose}
+              onPress={() => setShowModal(false)}>
+              <Text style={styles.modalCloseLabel}>Close</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -416,12 +335,34 @@ const PatientManagementScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: spacing.md,
   },
-  statsSection: {
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  loaderContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loaderLabel: {
+    marginTop: spacing.sm,
+    color: palette.textSecondary,
+  },
+  inlineStatus: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  inlineStatusLabel: {
+    marginLeft: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   statCard: {
     flex: 1,
@@ -429,293 +370,191 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     padding: spacing.md,
     alignItems: 'center',
-    marginHorizontal: spacing.xs,
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: palette.primary,
-    marginBottom: spacing.xs,
+  statValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: palette.textPrimary,
   },
   statLabel: {
     fontSize: 12,
     color: palette.textSecondary,
-    textAlign: 'center',
-  },
-  searchSection: {
-    marginBottom: spacing.lg,
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.md,
-  },
-  searchIcon: {
-    fontSize: 16,
-    marginRight: spacing.sm,
   },
   searchInput: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: palette.textPrimary,
-  },
-  filterContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  filterButton: {
-    flex: 1,
-    backgroundColor: palette.surface,
-    borderRadius: radii.md,
-    paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
-    alignItems: 'center',
     borderWidth: 1,
     borderColor: palette.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: palette.textPrimary,
   },
-  selectedFilterButton: {
+  filterScroll: {
+    marginVertical: spacing.sm,
+  },
+  filterChip: {
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    marginRight: spacing.xs,
+  },
+  filterChipActive: {
     backgroundColor: palette.primary,
     borderColor: palette.primary,
   },
-  filterButtonText: {
-    color: palette.textSecondary,
-    fontWeight: '600',
+  filterChipLabel: {
     fontSize: 12,
+    color: palette.textSecondary,
   },
-  selectedFilterButtonText: {
+  filterChipLabelActive: {
     color: palette.textOnPrimary,
   },
-  section: {
-    marginBottom: spacing.xl,
+  emptyState: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+    marginTop: spacing.lg,
   },
-  sectionHeader: {
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  emptyCopy: {
+    fontSize: 13,
+    color: palette.textSecondary,
+    textAlign: 'center',
+  },
+  card: {
+    backgroundColor: palette.card,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: palette.textPrimary,
-  },
-  addButton: {
-    backgroundColor: palette.primary,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.md,
-  },
-  addButtonText: {
-    color: palette.textOnPrimary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  patientCard: {
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  patientHeader: {
-    marginBottom: spacing.md,
-  },
-  patientInfo: {
-    flex: 1,
-  },
-  patientNameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: spacing.sm,
   },
   patientName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: palette.textPrimary,
-    flex: 1,
+  },
+  patientMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
   },
   badges: {
     flexDirection: 'row',
     gap: spacing.xs,
   },
-  priorityBadge: {
+  badge: {
+    borderRadius: radii.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
-    borderRadius: radii.sm,
   },
-  statusBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radii.sm,
+  badgeLabel: {
+    color: palette.textOnPrimary,
+    fontSize: 11,
+    fontWeight: '600',
   },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: palette.textOnDark,
-  },
-  patientDetails: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  patientCondition: {
-    fontSize: 14,
-    color: palette.textPrimary,
-    fontWeight: '500',
-    marginBottom: spacing.xs,
-  },
-  patientVisit: {
-    fontSize: 12,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  patientNextVisit: {
-    fontSize: 12,
-    color: palette.primary,
-    fontWeight: '500',
-  },
-  patientActions: {
+  cardBody: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
   },
-  actionButton: {
+  label: {
+    fontSize: 11,
+    color: palette.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  value: {
+    fontSize: 14,
+    color: palette.textPrimary,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionBtn: {
     flex: 1,
-    backgroundColor: palette.surface,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
-    marginHorizontal: spacing.xs,
     alignItems: 'center',
   },
-  actionButtonText: {
-    color: palette.textSecondary,
-    fontWeight: '600',
-    fontSize: 12,
-  },
-  callButton: {
+  primaryAction: {
     backgroundColor: palette.primary,
   },
-  callButtonText: {
+  primaryActionLabel: {
     color: palette.textOnPrimary,
-  },
-  scheduleButton: {
-    backgroundColor: palette.accent,
-  },
-  scheduleButtonText: {
-    color: palette.textOnDark,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
-  },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: spacing.md,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: palette.textPrimary,
-    fontWeight: '500',
-    marginBottom: spacing.sm,
-  },
-  emptyStateSubtext: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    textAlign: 'center',
-  },
-  quickActionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
-  quickActionCard: {
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    width: '48%',
-    marginBottom: spacing.md,
-    alignItems: 'center',
-  },
-  quickActionIcon: {
-    fontSize: 24,
-    marginBottom: spacing.sm,
-  },
-  quickActionTitle: {
-    fontSize: 14,
     fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing.xs,
-    textAlign: 'center',
   },
-  quickActionDescription: {
-    fontSize: 12,
+  secondaryAction: {
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  secondaryActionLabel: {
+    color: palette.textPrimary,
+    fontWeight: '600',
+  },
+  loaderLabelText: {
     color: palette.textSecondary,
-    textAlign: 'center',
-    lineHeight: 16,
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.lg,
   },
-  modalContent: {
+  modalCard: {
+    width: '100%',
     backgroundColor: palette.card,
     borderRadius: radii.lg,
     padding: spacing.lg,
-    width: '90%',
-    maxWidth: 400,
-    maxHeight: '80%',
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: palette.textPrimary,
-    marginBottom: spacing.lg,
-    textAlign: 'center',
   },
-  modalScroll: {
-    flex: 1,
-    marginBottom: spacing.lg,
-  },
-  modalSection: {
-    marginBottom: spacing.lg,
-  },
-  modalSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing.md,
-  },
-  modalInfo: {
+  modalSubtitle: {
     fontSize: 14,
     color: palette.textSecondary,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.lg,
   },
-  modalActions: {
+  modalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: spacing.sm,
   },
-  modalActionButton: {
-    flex: 1,
-    backgroundColor: palette.primary,
-    borderRadius: radii.md,
-    paddingVertical: spacing.md,
-    marginHorizontal: spacing.xs,
-    alignItems: 'center',
+  modalLabel: {
+    color: palette.textSecondary,
   },
-  modalActionButtonText: {
-    color: palette.textOnPrimary,
+  modalValue: {
+    color: palette.textPrimary,
     fontWeight: '600',
   },
-  modalCloseButton: {
-    backgroundColor: palette.surface,
+  modalClose: {
+    marginTop: spacing.lg,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
-  modalCloseButtonText: {
-    color: palette.textSecondary,
+  modalCloseLabel: {
+    color: palette.textPrimary,
+    fontWeight: '600',
   },
 });
 

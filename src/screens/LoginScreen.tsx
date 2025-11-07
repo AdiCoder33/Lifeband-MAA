@@ -1,4 +1,4 @@
-import React, {useMemo, useState, useEffect} from 'react';
+import React, {useMemo, useState, useEffect, useCallback} from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
@@ -24,12 +24,13 @@ type Navigation = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<Navigation>();
-  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading, needsRegistration, completeGoogleRegistration} = useAuth();
+  const {login, loginWithGoogle, signInWithFirebase, signUpWithFirebase, logout, isAuthenticated, isLoading: authLoading, needsRegistration, completeGoogleRegistration, selectRole} = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoadingLocal, setIsLoadingLocal] = useState(false);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'patient' | 'doctor' | 'asha' | null>(null);
+  const [loginRole, setLoginRole] = useState<'doctor' | 'mother'>('mother');
 
   // Force logout any existing session when component mounts (for fresh login)
   useEffect(() => {
@@ -45,6 +46,22 @@ export const LoginScreen: React.FC = () => {
       setShowRoleModal(true);
     }
   }, [needsRegistration]);
+
+  const handleQuickRoleSelect = useCallback(
+    (role: 'doctor' | 'mother') => {
+      setLoginRole(role);
+      if (role === 'doctor') {
+        selectRole('Doctor');
+      } else {
+        selectRole('Patient');
+      }
+    },
+    [selectRole],
+  );
+
+  useEffect(() => {
+    handleQuickRoleSelect('mother');
+  }, [handleQuickRoleSelect]);
 
   const isDisabled = useMemo(
     () => !email.trim() || !password.trim() || isLoadingLocal || authLoading,
@@ -147,6 +164,44 @@ export const LoginScreen: React.FC = () => {
             <View style={styles.formHeader}>
               <Text style={styles.formTitle}>Welcome Back</Text>
               <Text style={styles.formSubtitle}>Sign in to continue</Text>
+            </View>
+
+            <View style={styles.roleQuickSection}>
+              <Text style={styles.roleQuickLabel}>Choose your portal</Text>
+              <View style={styles.roleQuickRow}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => handleQuickRoleSelect('doctor')}
+                  style={[
+                    styles.roleQuickButton,
+                    loginRole === 'doctor' && styles.roleQuickButtonActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.roleQuickButtonText,
+                      loginRole === 'doctor' && styles.roleQuickButtonTextActive,
+                    ]}>
+                    Sign in as Doctor
+                  </Text>
+                  <Text style={styles.roleQuickHelper}>Care team workspace</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  onPress={() => handleQuickRoleSelect('mother')}
+                  style={[
+                    styles.roleQuickButton,
+                    loginRole === 'mother' && styles.roleQuickButtonActive,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.roleQuickButtonText,
+                      loginRole === 'mother' && styles.roleQuickButtonTextActive,
+                    ]}>
+                    Sign in as Mother
+                  </Text>
+                  <Text style={styles.roleQuickHelper}>Expectant parent app</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             <View style={styles.field}>
@@ -354,6 +409,54 @@ const styles = StyleSheet.create({
   },
   formHeader: {
     marginBottom: spacing.xl,
+  },
+  roleQuickSection: {
+    marginBottom: spacing.lg,
+  },
+  roleQuickLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: palette.textSecondary,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  roleQuickRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  roleQuickButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1.5,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceSoft,
+    alignItems: 'center',
+  },
+  roleQuickButtonActive: {
+    borderColor: palette.primary,
+    backgroundColor: palette.primary + '12',
+    shadowColor: palette.primary,
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: {width: 0, height: 2},
+    elevation: 2,
+  },
+  roleQuickButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  roleQuickButtonTextActive: {
+    color: palette.primary,
+  },
+  roleQuickHelper: {
+    marginTop: 4,
+    fontSize: 12,
+    color: palette.textSecondary,
+    textAlign: 'center',
   },
   field: {
     marginBottom: spacing.md,

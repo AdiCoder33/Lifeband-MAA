@@ -1,449 +1,587 @@
-import React, {useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
-  View,
-  TouchableOpacity,
-  Alert,
   TextInput,
-  Modal,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import {palette, spacing, radii} from '../../theme';
+import {palette, radii, spacing} from '../../theme';
+import {
+  useDoctorAppointmentsQuery,
+  useLinkedPatientsQuery,
+  useUpdateAppointmentStatusMutation,
+} from '../../features/doctor/queries';
+import type {Appointment as FirebaseAppointment} from '../../services/firebase/health';
+import type {LinkedPatient} from '../../types/models';
 
-type AppointmentStatus = 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no-show';
-type AppointmentType = 'consultation' | 'follow-up' | 'check-up' | 'emergency' | 'procedure';
+type AppointmentStatus = FirebaseAppointment['status'];
+type AppointmentType = FirebaseAppointment['type'];
 
-type Appointment = {
-  id: string;
+type AppointmentRow = FirebaseAppointment & {
+  scheduledAt: Date | null;
   patientName: string;
-  patientId: string;
-  date: string;
-  time: string;
-  duration: number;
-  type: AppointmentType;
-  status: AppointmentStatus;
-  notes?: string;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  symptoms?: string;
-  contactNumber: string;
+  patientVillage?: string;
+};
+
+const DAYS_VISIBLE = 7;
+const STATUS_FILTERS: Array<'all' | AppointmentStatus> = [
+  'all',
+  'scheduled',
+  'rescheduled',
+  'completed',
+  'cancelled',
+];
+
+const TYPE_ICON: Record<AppointmentType, string> = {
+  consultation: 'CONS',
+  'follow-up': 'F-UP',
+  checkup: 'CHK',
+  emergency: 'EMR',
+};
+
+const titleCase = (value: string) =>
+  value.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+
+const ensureDate = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof (value as {toDate?: () => Date}).toDate === 'function') {
+    return (value as {toDate: () => Date}).toDate();
+  }
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const dateKey = (date: Date | null) =>
+  date ? date.toISOString().split('T')[0] : '';
+
+const formatSlot = (date: Date | null, duration: number) => {
+  if (!date) {
+    return 'Time pending';
+  }
+  const start = date.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+  if (!duration) {
+    return start;
+  }
+  const end = new Date(date.getTime() + duration * 60 * 1000).toLocaleTimeString(
+    [],
+    {hour: '2-digit', minute: '2-digit'},
+  );
+  return `${start} – ${end}`;
+};
+
+const derivePriority = (
+  type: AppointmentType,
+  status: AppointmentStatus,
+): 'low' | 'normal' | 'high' | 'urgent' => {
+  if (type === 'emergency') {
+    return 'urgent';
+  }
+  if (status === 'cancelled') {
+    return 'low';
+  }
+  if (type === 'follow-up') {
+    return 'high';
+  }
+  return 'normal';
+};
+
+const getStatusColor = (status: AppointmentStatus) => {
+  switch (status) {
+    case 'completed':
+      return palette.success;
+    case 'cancelled':
+      return palette.danger;
+    case 'rescheduled':
+      return palette.warning;
+    default:
+      return palette.info;
+  }
+};
+
+const getPriorityColor = (priority: 'low' | 'normal' | 'high' | 'urgent') => {
+  switch (priority) {
+    case 'urgent':
+      return palette.danger;
+    case 'high':
+      return palette.warning;
+    case 'normal':
+      return palette.primary;
+    default:
+      return palette.textSecondary;
+  }
 };
 
 const DoctorAppointmentsScreen: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [filterStatus, setFilterStatus] = useState<AppointmentStatus | 'all'>('all');
+  const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
+  const [statusFilter, setStatusFilter] =
+    useState<'all' | AppointmentStatus>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewAppointment, setShowNewAppointment] = useState(false);
 
-  const appointments: Appointment[] = [
-    {
-      id: '1',
-      patientName: 'Priya Sharma',
-      patientId: 'P001',
-      date: '2024-01-15',
-      time: '09:00',
-      duration: 30,
-      type: 'consultation',
-      status: 'confirmed',
-      priority: 'normal',
-      symptoms: 'Fever, headache',
-      contactNumber: '+91-98765-43210',
-      notes: 'First visit - general consultation',
-    },
-    {
-      id: '2',
-      patientName: 'Anjali Reddy',
-      patientId: 'P002',
-      date: '2024-01-15',
-      time: '09:30',
-      duration: 45,
-      type: 'follow-up',
-      status: 'scheduled',
-      priority: 'high',
-      symptoms: 'Follow-up for diabetes',
-      contactNumber: '+91-98765-43211',
-      notes: 'Check blood sugar levels',
-    },
-    {
-      id: '3',
-      patientName: 'Meera Patel',
-      patientId: 'P003',
-      date: '2024-01-15',
-      time: '10:15',
-      duration: 30,
-      type: 'check-up',
-      status: 'completed',
-      priority: 'normal',
-      symptoms: 'Regular check-up',
-      contactNumber: '+91-98765-43212',
-    },
-    {
-      id: '4',
-      patientName: 'Kavitha Kumar',
-      patientId: 'P004',
-      date: '2024-01-15',
-      time: '11:00',
-      duration: 60,
-      type: 'procedure',
-      status: 'scheduled',
-      priority: 'urgent',
-      symptoms: 'Minor surgical procedure',
-      contactNumber: '+91-98765-43213',
-      notes: 'Pre-op preparations required',
-    },
-    {
-      id: '5',
-      patientName: 'Sunita Gupta',
-      patientId: 'P005',
-      date: '2024-01-15',
-      time: '14:00',
-      duration: 30,
-      type: 'consultation',
-      status: 'cancelled',
-      priority: 'low',
-      symptoms: 'Cold symptoms',
-      contactNumber: '+91-98765-43214',
-      notes: 'Patient rescheduled',
-    },
-  ];
+  const {
+    data: appointmentsData = [],
+    isLoading: appointmentsLoading,
+    isFetching: appointmentsFetching,
+  } = useDoctorAppointmentsQuery();
+  const {data: linkedPatients = [], isLoading: patientsLoading} =
+    useLinkedPatientsQuery();
+  const updateStatus = useUpdateAppointmentStatusMutation();
 
-  const getStatusColor = (status: AppointmentStatus) => {
-    switch (status) {
-      case 'confirmed':
-        return palette.success;
-      case 'scheduled':
-        return palette.info;
-      case 'completed':
-        return palette.primary;
-      case 'cancelled':
-        return palette.danger;
-      case 'no-show':
-        return palette.warning;
-      default:
-        return palette.textSecondary;
-    }
-  };
+  const patientLookup = useMemo(() => {
+    const map = new Map<string, LinkedPatient>();
+    linkedPatients.forEach(patient => {
+      map.set(patient.patientId, patient);
+    });
+    return map;
+  }, [linkedPatients]);
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent':
-        return palette.danger;
-      case 'high':
-        return palette.warning;
-      case 'normal':
-        return palette.info;
-      case 'low':
-        return palette.textSecondary;
-      default:
-        return palette.textSecondary;
-    }
-  };
+  const appointments = useMemo<AppointmentRow[]>(() => {
+    return appointmentsData.map(item => {
+      const scheduledAt = ensureDate(item.scheduledDate);
+      const patient = patientLookup.get(item.patientId);
+      return {
+        ...item,
+        scheduledAt,
+        patientName:
+          patient?.patientName ??
+          patient?.patientId ??
+          item.patientId ??
+          'Patient',
+        patientVillage: patient?.village,
+      };
+    });
+  }, [appointmentsData, patientLookup]);
 
-  const getTypeIcon = (type: AppointmentType) => {
-    switch (type) {
-      case 'consultation':
-        return '👩‍⚕️';
-      case 'follow-up':
-        return '🔄';
-      case 'check-up':
-        return '🩺';
-      case 'emergency':
-        return '🚨';
-      case 'procedure':
-        return '🏥';
-      default:
-        return '📅';
-    }
-  };
+  const filteredAppointments = useMemo(() => {
+    const search = searchQuery.trim().toLowerCase();
+    return appointments
+      .filter(item => {
+        const matchesDate = dateKey(item.scheduledAt) === selectedDate;
+        const matchesStatus =
+          statusFilter === 'all' || item.status === statusFilter;
+        const matchesSearch =
+          !search ||
+          item.patientName.toLowerCase().includes(search) ||
+          (item.patientId ?? '').toLowerCase().includes(search);
+        return matchesDate && matchesStatus && matchesSearch;
+      })
+      .sort((a, b) => {
+        const aTime = a.scheduledAt?.getTime() ?? 0;
+        const bTime = b.scheduledAt?.getTime() ?? 0;
+        return aTime - bTime;
+      });
+  }, [appointments, searchQuery, selectedDate, statusFilter]);
 
-  const filteredAppointments = appointments.filter(appointment => {
-    const matchesDate = appointment.date === selectedDate;
-    const matchesStatus = filterStatus === 'all' || appointment.status === filterStatus;
-    const matchesSearch = appointment.patientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         appointment.patientId.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesDate && matchesStatus && matchesSearch;
+  const dayStats = useMemo(() => {
+    const todays = appointments.filter(
+      item => dateKey(item.scheduledAt) === selectedDate,
+    );
+    return {
+      total: todays.length,
+      scheduled: todays.filter(
+        item => item.status === 'scheduled' || item.status === 'rescheduled',
+      ).length,
+      completed: todays.filter(item => item.status === 'completed').length,
+      cancelled: todays.filter(item => item.status === 'cancelled').length,
+    };
+  }, [appointments, selectedDate]);
+
+  const confirmStatusChange = useCallback(
+    (appointment: AppointmentRow, status: AppointmentStatus, label: string) => {
+      Alert.alert(
+        `Mark as ${label}`,
+        `Update ${appointment.patientName}'s appointment to ${label.toLowerCase()}?`,
+        [
+          {text: 'Not now', style: 'cancel'},
+          {
+            text: 'Update',
+            onPress: () =>
+              updateStatus
+                .mutateAsync({appointmentId: appointment.id, status})
+                .catch(error => {
+                  Alert.alert(
+                    'Unable to update',
+                    (error as Error)?.message ?? 'Please try again later.',
+                  );
+                }),
+          },
+        ],
+      );
+    },
+    [updateStatus],
+  );
+
+  const handleCall = useCallback((appointment: AppointmentRow) => {
+    Alert.alert(
+      'Contact details',
+      `Ask ${appointment.patientName} to add a phone number in their profile to enable calling from this screen.`,
+    );
+  }, []);
+
+  const handleNotes = useCallback((appointment: AppointmentRow) => {
+    Alert.alert(
+      'Appointment notes',
+      appointment.notes?.trim() || 'No notes recorded yet.',
+    );
+  }, []);
+
+  const renderStatusFilter = (value: 'all' | AppointmentStatus) => (
+    <TouchableOpacity
+      key={value}
+      style={[
+        styles.filterChip,
+        statusFilter === value && styles.filterChipActive,
+      ]}
+      onPress={() => setStatusFilter(value)}>
+      <Text
+        style={[
+          styles.filterChipLabel,
+          statusFilter === value && styles.filterChipLabelActive,
+        ]}>
+        {value === 'all' ? 'All' : titleCase(value)}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const dateChips = Array.from({length: DAYS_VISIBLE}, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    const key = date.toISOString().split('T')[0];
+    const active = key === selectedDate;
+    return (
+      <TouchableOpacity
+        key={key}
+        style={[styles.dateChip, active && styles.dateChipActive]}
+        onPress={() => setSelectedDate(key)}>
+        <Text style={[styles.dateChipDay, active && styles.dateChipTextActive]}>
+          {date.toLocaleDateString('en-US', {weekday: 'short'})}
+        </Text>
+        <Text
+          style={[styles.dateChipNumber, active && styles.dateChipTextActive]}>
+          {date.getDate()}
+        </Text>
+      </TouchableOpacity>
+    );
   });
 
-  const todaysStats = {
-    total: appointments.filter(a => a.date === selectedDate).length,
-    confirmed: appointments.filter(a => a.date === selectedDate && a.status === 'confirmed').length,
-    completed: appointments.filter(a => a.date === selectedDate && a.status === 'completed').length,
-    pending: appointments.filter(a => a.date === selectedDate && a.status === 'scheduled').length,
-  };
+  const firstLoad =
+    (appointmentsLoading || patientsLoading) && appointmentsData.length === 0;
 
-  const handleAppointmentAction = (appointment: Appointment, action: string) => {
-    switch (action) {
-      case 'confirm':
-        Alert.alert('Confirm Appointment', `Confirm appointment with ${appointment.patientName}?`);
-        break;
-      case 'reschedule':
-        Alert.alert('Reschedule', `Reschedule appointment with ${appointment.patientName}`);
-        break;
-      case 'cancel':
-        Alert.alert('Cancel Appointment', `Cancel appointment with ${appointment.patientName}?`);
-        break;
-      case 'complete':
-        Alert.alert('Mark Complete', `Mark appointment with ${appointment.patientName} as completed?`);
-        break;
-      case 'call':
-        Alert.alert('Call Patient', `Calling ${appointment.contactNumber}`);
-        break;
-      case 'notes':
-        Alert.alert('Add Notes', `Add notes for ${appointment.patientName}`);
-        break;
+  const selectedDateLabel = useMemo(() => {
+    const date = new Date(selectedDate);
+    if (Number.isNaN(date.getTime())) {
+      return selectedDate;
     }
-  };
+    return date.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+    });
+  }, [selectedDate]);
 
   return (
     <ScreenBackground>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{todaysStats.total}</Text>
-            <Text style={styles.statLabel}>Total Today</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.success}]}>{todaysStats.confirmed}</Text>
-            <Text style={styles.statLabel}>Confirmed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.primary}]}>{todaysStats.completed}</Text>
-            <Text style={styles.statLabel}>Completed</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.warning}]}>{todaysStats.pending}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </View>
+      {firstLoad ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator color={palette.primary} size="large" />
+          <Text style={styles.loaderLabel}>Loading appointments…</Text>
         </View>
-
-        {/* Date Selector */}
-        <View style={styles.dateSection}>
-          <Text style={styles.sectionTitle}>📅 Select Date</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll}>
-            {Array.from({length: 7}, (_, index) => {
-              const date = new Date();
-              date.setDate(date.getDate() + index);
-              const dateString = date.toISOString().split('T')[0];
-              const isSelected = dateString === selectedDate;
-              
-              return (
-                <TouchableOpacity
-                  key={dateString}
-                  style={[styles.dateCard, isSelected && styles.selectedDateCard]}
-                  onPress={() => setSelectedDate(dateString)}>
-                  <Text style={[styles.dateDay, isSelected && styles.selectedDateText]}>
-                    {date.toLocaleDateString('en-US', {weekday: 'short'})}
-                  </Text>
-                  <Text style={[styles.dateNumber, isSelected && styles.selectedDateText]}>
-                    {date.getDate()}
-                  </Text>
-                  <Text style={[styles.dateMonth, isSelected && styles.selectedDateText]}>
-                    {date.toLocaleDateString('en-US', {month: 'short'})}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* Search & Filters */}
-        <View style={styles.filtersSection}>
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search patients..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor={palette.textSecondary}
-          />
-          
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.statusFilters}>
-            {(['all', 'scheduled', 'confirmed', 'completed', 'cancelled'] as const).map(status => (
-              <TouchableOpacity
-                key={status}
-                style={[
-                  styles.filterButton,
-                  filterStatus === status && styles.activeFilterButton,
-                ]}
-                onPress={() => setFilterStatus(status)}>
-                <Text
-                  style={[
-                    styles.filterButtonText,
-                    filterStatus === status && styles.activeFilterButtonText,
-                  ]}>
-                  {status.charAt(0).toUpperCase() + status.slice(1)}
+      ) : (
+        <>
+          <ScrollView
+            style={styles.container}
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}>
+            {appointmentsFetching && !appointmentsLoading ? (
+              <View style={styles.inlineStatus}>
+                <ActivityIndicator color={palette.primary} size="small" />
+                <Text style={styles.inlineStatusLabel}>
+                  Syncing latest updates…
                 </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{dayStats.total}</Text>
+                <Text style={styles.statLabel}>Total</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={[styles.statValue, {color: palette.info}]}>
+                  {dayStats.scheduled}
+                </Text>
+                <Text style={styles.statLabel}>Scheduled</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={[styles.statValue, {color: palette.success}]}>
+                  {dayStats.completed}
+                </Text>
+                <Text style={styles.statLabel}>Completed</Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={[styles.statValue, {color: palette.danger}]}>
+                  {dayStats.cancelled}
+                </Text>
+                <Text style={styles.statLabel}>Cancelled</Text>
+              </View>
+            </View>
+
+            <View>
+              <Text style={styles.sectionTitle}>Select Date</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.dateScroll}>
+                {dateChips}
+              </ScrollView>
+            </View>
+
+            <View style={styles.filtersSection}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search by patient or ID"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholderTextColor={palette.textSecondary}
+              />
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.filtersScroll}>
+                {STATUS_FILTERS.map(renderStatusFilter)}
+              </ScrollView>
+            </View>
+
+            <View style={styles.actionsRow}>
+              <TouchableOpacity
+                style={styles.primaryAction}
+                onPress={() => setShowNewAppointment(true)}>
+                <Text style={styles.primaryActionLabel}>New Appointment</Text>
               </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
+              <TouchableOpacity
+                style={styles.secondaryAction}
+                onPress={() =>
+                  Alert.alert(
+                    'Bulk actions',
+                    'Select appointments from the list to update multiple entries (coming soon).',
+                  )
+                }>
+                <Text style={styles.secondaryActionLabel}>Bulk Actions</Text>
+              </TouchableOpacity>
+            </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => setShowNewAppointment(true)}>
-            <Text style={styles.actionButtonText}>➕ New Appointment</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton]}
-            onPress={() => Alert.alert('Bulk Actions', 'Select multiple appointments for bulk actions')}>
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>⚡ Bulk Actions</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Appointments List */}
-        <View style={styles.appointmentsSection}>
-          <Text style={styles.sectionTitle}>
-            🗓️ Appointments - {new Date(selectedDate).toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </Text>
-          
-          {filteredAppointments.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateIcon}>📅</Text>
-              <Text style={styles.emptyStateTitle}>No Appointments Found</Text>
-              <Text style={styles.emptyStateDescription}>
-                {filterStatus === 'all' 
-                  ? 'No appointments scheduled for this date'
-                  : `No ${filterStatus} appointments found`}
+            <View style={styles.listHeader}>
+              <Text style={styles.sectionTitle}>
+                Appointments — {selectedDateLabel}
+              </Text>
+              <Text style={styles.listMeta}>
+                Showing {filteredAppointments.length} of {dayStats.total}
               </Text>
             </View>
-          ) : (
-            filteredAppointments.map(appointment => (
-              <View key={appointment.id} style={styles.appointmentCard}>
-                <View style={styles.appointmentHeader}>
-                  <View style={styles.appointmentTime}>
-                    <Text style={styles.timeText}>{appointment.time}</Text>
-                    <Text style={styles.durationText}>{appointment.duration} min</Text>
-                  </View>
-                  
-                  <View style={styles.appointmentInfo}>
-                    <View style={styles.patientInfo}>
-                      <Text style={styles.patientName}>{appointment.patientName}</Text>
-                      <Text style={styles.patientId}>ID: {appointment.patientId}</Text>
-                    </View>
-                    
-                    <View style={styles.appointmentMeta}>
-                      <View style={styles.typeContainer}>
-                        <Text style={styles.typeIcon}>{getTypeIcon(appointment.type)}</Text>
-                        <Text style={styles.typeText}>{appointment.type}</Text>
+
+            {filteredAppointments.length === 0 ? (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyTitle}>Nothing scheduled</Text>
+                <Text style={styles.emptyCopy}>
+                  {statusFilter === 'all'
+                    ? 'Patients have not booked a visit for this day yet.'
+                    : `No ${titleCase(statusFilter)} visits found.`}
+                </Text>
+              </View>
+            ) : (
+              filteredAppointments.map(appointment => {
+                const priority = derivePriority(
+                  appointment.type,
+                  appointment.status,
+                );
+                return (
+                  <View key={appointment.id} style={styles.card}>
+                    <View style={styles.cardHeader}>
+                      <View>
+                        <Text style={styles.slotLabel}>
+                          {formatSlot(
+                            appointment.scheduledAt,
+                            appointment.duration,
+                          )}
+                        </Text>
+                        {appointment.scheduledAt ? (
+                          <Text style={styles.slotSubLabel}>
+                            {appointment.scheduledAt.toLocaleDateString(
+                              'en-US',
+                              {month: 'short', day: 'numeric'},
+                            )}
+                          </Text>
+                        ) : null}
                       </View>
-                      
-                      <View style={styles.badges}>
+
+                      <View style={styles.badgesRow}>
                         <View
                           style={[
-                            styles.statusBadge,
+                            styles.badge,
                             {backgroundColor: getStatusColor(appointment.status)},
                           ]}>
-                          <Text style={styles.badgeText}>{appointment.status}</Text>
+                          <Text style={styles.badgeLabel}>
+                            {titleCase(appointment.status)}
+                          </Text>
                         </View>
-                        
                         <View
                           style={[
-                            styles.priorityBadge,
-                            {backgroundColor: getPriorityColor(appointment.priority)},
+                            styles.badge,
+                            {backgroundColor: getPriorityColor(priority)},
                           ]}>
-                          <Text style={styles.badgeText}>{appointment.priority}</Text>
+                          <Text style={styles.badgeLabel}>
+                            {titleCase(priority)}
+                          </Text>
                         </View>
                       </View>
                     </View>
+
+                    <View style={styles.patientRow}>
+                      <View style={styles.patientAvatar}>
+                        <Text style={styles.patientAvatarLabel}>
+                          {appointment.patientName.slice(0, 1).toUpperCase()}
+                        </Text>
+                      </View>
+                      <View style={styles.patientInfo}>
+                        <Text style={styles.patientName}>
+                          {appointment.patientName}
+                        </Text>
+                        {appointment.patientId ? (
+                          <Text style={styles.patientMeta}>
+                            ID: {appointment.patientId}
+                          </Text>
+                        ) : null}
+                        {appointment.patientVillage ? (
+                          <Text style={styles.patientMeta}>
+                            {appointment.patientVillage}
+                          </Text>
+                        ) : null}
+                      </View>
+                      <View style={styles.typePill}>
+                        <Text style={styles.typeIcon}>
+                          {TYPE_ICON[appointment.type]}
+                        </Text>
+                        <Text style={styles.typeLabel}>
+                          {titleCase(appointment.type)}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {appointment.notes ? (
+                      <View style={styles.notesBox}>
+                        <Text style={styles.notesLabel}>Notes</Text>
+                        <Text style={styles.notesValue}>
+                          {appointment.notes}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    <View style={styles.actionsBar}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.callBtn]}
+                        onPress={() => handleCall(appointment)}>
+                        <Text style={styles.actionLabel}>Call</Text>
+                      </TouchableOpacity>
+
+                      {appointment.status !== 'completed' && (
+                        <TouchableOpacity
+                          style={[styles.actionBtn, styles.completeBtn]}
+                          disabled={updateStatus.isPending}
+                          onPress={() =>
+                            confirmStatusChange(
+                              appointment,
+                              'completed',
+                              'Completed',
+                            )
+                          }>
+                          <Text style={styles.actionLabel}>Complete</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      {appointment.status !== 'rescheduled' &&
+                        appointment.status !== 'completed' && (
+                          <TouchableOpacity
+                            style={[styles.actionBtn, styles.rescheduleBtn]}
+                            disabled={updateStatus.isPending}
+                            onPress={() =>
+                              confirmStatusChange(
+                                appointment,
+                                'rescheduled',
+                                'Rescheduled',
+                              )
+                            }>
+                            <Text style={styles.actionLabel}>Reschedule</Text>
+                          </TouchableOpacity>
+                        )}
+
+                      {appointment.status !== 'cancelled' && (
+                        <TouchableOpacity
+                          style={[styles.actionBtn, styles.cancelBtn]}
+                          disabled={updateStatus.isPending}
+                          onPress={() =>
+                            confirmStatusChange(
+                              appointment,
+                              'cancelled',
+                              'Cancelled',
+                            )
+                          }>
+                          <Text style={styles.actionLabel}>Cancel</Text>
+                        </TouchableOpacity>
+                      )}
+
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.notesBtn]}
+                        onPress={() => handleNotes(appointment)}>
+                        <Text style={styles.actionLabel}>Notes</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                </View>
-                
-                {appointment.symptoms && (
-                  <View style={styles.symptomsContainer}>
-                    <Text style={styles.symptomsLabel}>Symptoms:</Text>
-                    <Text style={styles.symptomsText}>{appointment.symptoms}</Text>
-                  </View>
-                )}
-                
-                {appointment.notes && (
-                  <View style={styles.notesContainer}>
-                    <Text style={styles.notesLabel}>Notes:</Text>
-                    <Text style={styles.notesText}>{appointment.notes}</Text>
-                  </View>
-                )}
-                
-                <View style={styles.appointmentActions}>
+                );
+              })
+            )}
+          </ScrollView>
+
+          <Modal
+            visible={showNewAppointment}
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowNewAppointment(false)}>
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>New appointment</Text>
+                <Text style={styles.modalCopy}>
+                  Booking from this dashboard will be unlocked once doctors can
+                  define working hours. For now, invite patients to request a
+                  visit from their app.
+                </Text>
+                <View style={styles.modalActions}>
                   <TouchableOpacity
-                    style={[styles.actionBtn, styles.callBtn]}
-                    onPress={() => handleAppointmentAction(appointment, 'call')}>
-                    <Text style={styles.actionBtnText}>📞 Call</Text>
+                    style={styles.modalPrimary}
+                    onPress={() => setShowNewAppointment(false)}>
+                    <Text style={styles.modalPrimaryLabel}>Understood</Text>
                   </TouchableOpacity>
-                  
-                  {appointment.status === 'scheduled' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.confirmBtn]}
-                      onPress={() => handleAppointmentAction(appointment, 'confirm')}>
-                      <Text style={styles.actionBtnText}>✅ Confirm</Text>
-                    </TouchableOpacity>
-                  )}
-                  
-                  {appointment.status === 'confirmed' && (
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.completeBtn]}
-                      onPress={() => handleAppointmentAction(appointment, 'complete')}>
-                      <Text style={styles.actionBtnText}>✔️ Complete</Text>
-                    </TouchableOpacity>
-                  )}
-                  
                   <TouchableOpacity
-                    style={[styles.actionBtn, styles.rescheduleBtn]}
-                    onPress={() => handleAppointmentAction(appointment, 'reschedule')}>
-                    <Text style={styles.actionBtnText}>🔄 Reschedule</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={[styles.actionBtn, styles.notesBtn]}
-                    onPress={() => handleAppointmentAction(appointment, 'notes')}>
-                    <Text style={styles.actionBtnText}>📝 Notes</Text>
+                    style={styles.modalSecondary}
+                    onPress={() => setShowNewAppointment(false)}>
+                    <Text style={styles.modalSecondaryLabel}>Close</Text>
                   </TouchableOpacity>
                 </View>
               </View>
-            ))
-          )}
-        </View>
-      </ScrollView>
-
-      {/* New Appointment Modal */}
-      <Modal
-        visible={showNewAppointment}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowNewAppointment(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>➕ New Appointment</Text>
-            <Text style={styles.modalDescription}>
-              Create a new appointment for a patient
-            </Text>
-            
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalButton}
-                onPress={() => {
-                  setShowNewAppointment(false);
-                  Alert.alert('New Appointment', 'Opening appointment booking form...');
-                }}>
-                <Text style={styles.modalButtonText}>Create Appointment</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.modalButton, styles.modalSecondaryButton]}
-                onPress={() => setShowNewAppointment(false)}>
-                <Text style={[styles.modalButtonText, styles.modalSecondaryButtonText]}>Cancel</Text>
-              </TouchableOpacity>
             </View>
-          </View>
-        </View>
-      </Modal>
+          </Modal>
+        </>
+      )}
     </ScreenBackground>
   );
 };
@@ -451,340 +589,351 @@ const DoctorAppointmentsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: spacing.md,
   },
-  statsContainer: {
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  loaderContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  loaderLabel: {
+    marginTop: spacing.md,
+    color: palette.textSecondary,
+  },
+  inlineStatus: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: spacing.lg,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  inlineStatusLabel: {
+    marginLeft: spacing.xs,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
   statCard: {
+    flex: 1,
     backgroundColor: palette.card,
     borderRadius: radii.md,
     padding: spacing.md,
     alignItems: 'center',
-    flex: 1,
-    marginHorizontal: spacing.xs,
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  statValue: {
+    fontSize: 22,
+    fontWeight: '700',
     color: palette.textPrimary,
-    marginBottom: spacing.xs,
   },
   statLabel: {
     fontSize: 12,
     color: palette.textSecondary,
-    textAlign: 'center',
-  },
-  dateSection: {
-    marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: palette.textPrimary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
   dateScroll: {
-    flexDirection: 'row',
+    marginBottom: spacing.lg,
   },
-  dateCard: {
-    backgroundColor: palette.card,
+  dateChip: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
     borderRadius: radii.md,
-    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
     marginRight: spacing.sm,
     alignItems: 'center',
-    minWidth: 70,
   },
-  selectedDateCard: {
+  dateChipActive: {
     backgroundColor: palette.primary,
+    borderColor: palette.primary,
   },
-  dateDay: {
+  dateChipDay: {
     fontSize: 12,
     color: palette.textSecondary,
-    marginBottom: spacing.xs,
   },
-  dateNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  dateChipNumber: {
+    fontSize: 16,
+    fontWeight: '700',
     color: palette.textPrimary,
-    marginBottom: spacing.xs,
   },
-  dateMonth: {
-    fontSize: 10,
-    color: palette.textSecondary,
-  },
-  selectedDateText: {
+  dateChipTextActive: {
     color: palette.textOnPrimary,
   },
   filtersSection: {
     marginBottom: spacing.lg,
   },
   searchInput: {
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    fontSize: 16,
-    color: palette.textPrimary,
-    marginBottom: spacing.md,
-  },
-  statusFilters: {
-    flexDirection: 'row',
-  },
-  filterButton: {
-    backgroundColor: palette.card,
+    borderWidth: 1,
+    borderColor: palette.border,
     borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    marginRight: spacing.sm,
+    color: palette.textPrimary,
   },
-  activeFilterButton: {
+  filtersScroll: {
+    marginTop: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+    marginRight: spacing.xs,
+  },
+  filterChipActive: {
     backgroundColor: palette.primary,
+    borderColor: palette.primary,
   },
-  filterButtonText: {
+  filterChipLabel: {
+    fontSize: 12,
     color: palette.textSecondary,
-    fontSize: 14,
-    fontWeight: '500',
   },
-  activeFilterButtonText: {
+  filterChipLabelActive: {
     color: palette.textOnPrimary,
   },
-  quickActions: {
+  actionsRow: {
     flexDirection: 'row',
+    gap: spacing.sm,
     marginBottom: spacing.lg,
   },
-  actionButton: {
+  primaryAction: {
+    flex: 1,
     backgroundColor: palette.primary,
     borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginRight: spacing.md,
-    flex: 1,
+    paddingVertical: spacing.sm,
     alignItems: 'center',
   },
-  secondaryButton: {
-    backgroundColor: palette.card,
-  },
-  actionButtonText: {
+  primaryActionLabel: {
     color: palette.textOnPrimary,
     fontWeight: '600',
   },
-  secondaryButtonText: {
+  secondaryAction: {
+    flex: 1,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  secondaryActionLabel: {
     color: palette.textPrimary,
+    fontWeight: '600',
   },
-  appointmentsSection: {
-    marginBottom: spacing.xl,
+  listHeader: {
+    marginBottom: spacing.sm,
   },
-  appointmentCard: {
+  listMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  emptyState: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  emptyCopy: {
+    fontSize: 13,
+    color: palette.textSecondary,
+    textAlign: 'center',
+  },
+  card: {
     backgroundColor: palette.card,
     borderRadius: radii.md,
     padding: spacing.lg,
     marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: palette.border,
   },
-  appointmentHeader: {
+  cardHeader: {
     flexDirection: 'row',
-    marginBottom: spacing.md,
-  },
-  appointmentTime: {
-    marginRight: spacing.md,
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  timeText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: palette.primary,
-    marginBottom: spacing.xs,
+  slotLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.textPrimary,
   },
-  durationText: {
+  slotSubLabel: {
     fontSize: 12,
     color: palette.textSecondary,
   },
-  appointmentInfo: {
-    flex: 1,
+  badgesRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  badge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  badgeLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: palette.textOnPrimary,
+  },
+  patientRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  patientAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: palette.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing.md,
+  },
+  patientAvatarLabel: {
+    color: palette.textOnPrimary,
+    fontSize: 18,
+    fontWeight: '700',
   },
   patientInfo: {
-    marginBottom: spacing.sm,
+    flex: 1,
   },
   patientName: {
     fontSize: 16,
     fontWeight: '600',
     color: palette.textPrimary,
-    marginBottom: spacing.xs,
   },
-  patientId: {
+  patientMeta: {
     fontSize: 12,
     color: palette.textSecondary,
   },
-  appointmentMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  typeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  typePill: {
+    alignItems: 'flex-end',
   },
   typeIcon: {
-    fontSize: 16,
-    marginRight: spacing.xs,
+    fontSize: 12,
+    fontWeight: '700',
+    color: palette.textSecondary,
   },
-  typeText: {
-    fontSize: 14,
-    color: palette.textPrimary,
-    textTransform: 'capitalize',
-  },
-  badges: {
-    flexDirection: 'row',
-  },
-  statusBadge: {
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginLeft: spacing.xs,
-  },
-  priorityBadge: {
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    marginLeft: spacing.xs,
-  },
-  badgeText: {
-    color: palette.textOnPrimary,
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-  },
-  symptomsContainer: {
-    backgroundColor: palette.surface,
-    borderRadius: radii.sm,
-    padding: spacing.sm,
-    marginBottom: spacing.sm,
-  },
-  symptomsLabel: {
+  typeLabel: {
     fontSize: 12,
     color: palette.textSecondary,
-    marginBottom: spacing.xs,
+    textTransform: 'capitalize',
   },
-  symptomsText: {
-    fontSize: 14,
-    color: palette.textPrimary,
-  },
-  notesContainer: {
+  notesBox: {
     backgroundColor: palette.surface,
     borderRadius: radii.sm,
     padding: spacing.sm,
-    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   notesLabel: {
     fontSize: 12,
     color: palette.textSecondary,
     marginBottom: spacing.xs,
   },
-  notesText: {
-    fontSize: 14,
+  notesValue: {
+    fontSize: 13,
     color: palette.textPrimary,
   },
-  appointmentActions: {
+  actionsBar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: spacing.xs,
     marginTop: spacing.sm,
   },
   actionBtn: {
     borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
   },
   callBtn: {
-    backgroundColor: palette.success,
-  },
-  confirmBtn: {
     backgroundColor: palette.info,
   },
   completeBtn: {
-    backgroundColor: palette.primary,
+    backgroundColor: palette.success,
   },
   rescheduleBtn: {
     backgroundColor: palette.warning,
   },
+  cancelBtn: {
+    backgroundColor: palette.danger,
+  },
   notesBtn: {
     backgroundColor: palette.textSecondary,
   },
-  actionBtnText: {
+  actionLabel: {
     color: palette.textOnPrimary,
     fontSize: 12,
-    fontWeight: '500',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl * 2,
-  },
-  emptyStateIcon: {
-    fontSize: 48,
-    marginBottom: spacing.lg,
-  },
-  emptyStateTitle: {
-    fontSize: 18,
     fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  emptyStateDescription: {
-    fontSize: 14,
-    color: palette.textSecondary,
-    textAlign: 'center',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
+    padding: spacing.lg,
   },
-  modalContent: {
+  modalCard: {
     backgroundColor: palette.card,
     borderRadius: radii.lg,
-    padding: spacing.xl,
+    padding: spacing.lg,
     width: '100%',
-    maxWidth: 400,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 18,
+    fontWeight: '700',
     color: palette.textPrimary,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
-  modalDescription: {
+  modalCopy: {
     fontSize: 14,
     color: palette.textSecondary,
     textAlign: 'center',
-    marginBottom: spacing.xl,
+    marginBottom: spacing.lg,
   },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: spacing.sm,
   },
-  modalButton: {
+  modalPrimary: {
+    flex: 1,
     backgroundColor: palette.primary,
     borderRadius: radii.md,
     paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    flex: 1,
-    marginHorizontal: spacing.xs,
+    alignItems: 'center',
   },
-  modalSecondaryButton: {
-    backgroundColor: palette.surface,
-  },
-  modalButtonText: {
+  modalPrimaryLabel: {
     color: palette.textOnPrimary,
     fontWeight: '600',
-    textAlign: 'center',
   },
-  modalSecondaryButtonText: {
+  modalSecondary: {
+    flex: 1,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  modalSecondaryLabel: {
     color: palette.textPrimary,
+    fontWeight: '600',
   },
 });
 

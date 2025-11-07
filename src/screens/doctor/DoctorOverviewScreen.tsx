@@ -1,5 +1,6 @@
 import React, {useMemo} from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
@@ -16,6 +17,7 @@ import {useSyncPatientsList} from '../../features/patients/usePatientsSync';
 import {RiskFeedItem, RiskLevel} from '../../types/models';
 import {DoctorStackScreenProps} from '../../navigation/DoctorNavigator';
 import {palette, radii, spacing} from '../../theme';
+import {useDoctorRecentReviewsQuery} from '../../features/doctorReviews/queries';
 
 const riskPriority: Record<RiskLevel, number> = {
   HIGH: 0,

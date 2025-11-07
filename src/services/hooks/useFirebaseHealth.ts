@@ -1,5 +1,6 @@
+import {useCallback} from 'react';
 import HealthService from '../firebase/health';
-import { useAuth } from '../../context/AuthContext';
+import {useAuth} from '../../context/AuthContext';
 
 // Hook to integrate Firebase health services with your existing screens
 export const useFirebaseHealth = () => {
@@ -191,22 +192,39 @@ export const useFirebaseHealth = () => {
 
 // Doctor-specific hooks
 export const useFirebaseDoctor = () => {
-  const { user } = useAuth();
+  const {user} = useAuth();
   const doctorId = user?.uid;
 
-  return {
-    async getDoctorAppointments() {
-      if (!doctorId) return [];
-      return await HealthService.getDoctorAppointments(doctorId);
-    },
-
-    async updateAppointmentStatus(appointmentId: string, status: 'completed' | 'cancelled' | 'rescheduled', notes?: string) {
-      return await HealthService.updateAppointmentStatus(appointmentId, status, notes);
-    },
-
-    onAppointmentsChange(callback: (appointments: any[]) => void) {
-      if (!doctorId) return () => {};
-      return HealthService.onAppointmentsChange(doctorId, 'doctor', callback);
+  const getDoctorAppointments = useCallback(async () => {
+    if (!doctorId) {
+      return [];
     }
+    return HealthService.getDoctorAppointments(doctorId);
+  }, [doctorId]);
+
+  const updateAppointmentStatus = useCallback(
+    async (
+      appointmentId: string,
+      status: 'scheduled' | 'completed' | 'cancelled' | 'rescheduled',
+      notes?: string,
+    ) => HealthService.updateAppointmentStatus(appointmentId, status, notes),
+    [],
+  );
+
+  const onAppointmentsChange = useCallback(
+    (callback: (appointments: any[]) => void) => {
+      if (!doctorId) {
+        return () => {};
+      }
+      return HealthService.onAppointmentsChange(doctorId, 'doctor', callback);
+    },
+    [doctorId],
+  );
+
+  return {
+    doctorId,
+    getDoctorAppointments,
+    updateAppointmentStatus,
+    onAppointmentsChange,
   };
 };

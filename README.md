@@ -77,3 +77,13 @@ To learn more about React Native, take a look at the following resources:
 - [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
 - [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
 - [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+
+## Doctor Live Risk Feed
+
+The doctor dashboard expects a WebSocket stream at `/ws/live`. Run the mock feed while developing to keep the risk cards populated:
+
+```bash
+npm run start:risk-feed
+```
+
+The feed listens on `ws://localhost:8088/ws/live` by default. You can tweak the port or the broadcast interval via the `RISK_FEED_PORT` and `RISK_FEED_INTERVAL_MS` environment variables. See `docs/LIVE_RISK_FEED.md` for the full details.

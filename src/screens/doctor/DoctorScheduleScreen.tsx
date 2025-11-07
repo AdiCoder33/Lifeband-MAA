@@ -1,436 +1,402 @@
-import React, {useState} from 'react';
+import React, {useMemo, useState} from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  Alert,
-  TextInput,
+  View,
 } from 'react-native';
 import ScreenBackground from '../../components/ScreenBackground';
-import {palette, spacing, radii} from '../../theme';
+import {palette, radii, spacing} from '../../theme';
+import {
+  useDoctorAppointmentsQuery,
+  useLinkedPatientsQuery,
+} from '../../features/doctor/queries';
+import type {Appointment as FirebaseAppointment} from '../../services/firebase/health';
+import type {LinkedPatient} from '../../types/models';
 
-type TimeSlot = {
-  id: string;
-  time: string;
-  available: boolean;
-  patientName?: string;
-  patientId?: string;
-  appointmentType?: string;
-  duration: number;
+type AppointmentStatus = FirebaseAppointment['status'];
+type AppointmentType = FirebaseAppointment['type'];
+
+type AppointmentRow = FirebaseAppointment & {
+  scheduledAt: Date | null;
+  slotKey: string;
+  patientName: string;
+  patientVillage?: string;
 };
 
-type DaySchedule = {
-  date: string;
-  day: string;
-  slots: TimeSlot[];
+type SlotRow = {
+  id: string;
+  label: string;
+  available: boolean;
+  appointments: AppointmentRow[];
+};
+
+const DAY_START_HOUR = 9;
+const DAY_END_HOUR = 17;
+const SLOT_MINUTES = 30;
+const VIEW_MODES: Array<'day' | 'week'> = ['day', 'week'];
+const UPCOMING_DAYS = 5;
+
+const pad = (value: number) => value.toString().padStart(2, '0');
+const slotKey = (date: Date | null) =>
+  date ? `${pad(date.getHours())}:${pad(date.getMinutes())}` : '';
+const dateKey = (date: Date | null) =>
+  date ? date.toISOString().split('T')[0] : '';
+const titleCase = (value: string) =>
+  value.replace(/-/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+
+const ensureDate = (value: unknown): Date | null => {
+  if (!value) {
+    return null;
+  }
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof (value as {toDate?: () => Date}).toDate === 'function') {
+    return (value as {toDate: () => Date}).toDate();
+  }
+  const parsed = new Date(value as string | number);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const buildTemplate = (isoDate: string): Array<{id: string; start: Date}> => {
+  const base = new Date(isoDate);
+  if (Number.isNaN(base.getTime())) {
+    return [];
+  }
+  base.setHours(0, 0, 0, 0);
+  const slots: Array<{id: string; start: Date}> = [];
+  for (
+    let minutes = DAY_START_HOUR * 60;
+    minutes < DAY_END_HOUR * 60;
+    minutes += SLOT_MINUTES
+  ) {
+    const slotDate = new Date(base);
+    slotDate.setMinutes(minutes);
+    slots.push({
+      id: `${isoDate}-${slotKey(slotDate)}`,
+      start: slotDate,
+    });
+  }
+  return slots;
+};
+
+const getTypeLabel = (type: AppointmentType) => {
+  switch (type) {
+    case 'consultation':
+      return 'Consultation';
+    case 'follow-up':
+      return 'Follow-up';
+    case 'checkup':
+      return 'Check-up';
+    case 'emergency':
+      return 'Emergency';
+    default:
+      return 'Visit';
+  }
 };
 
 const DoctorScheduleScreen: React.FC = () => {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  const [viewMode, setViewMode] = useState<'week' | 'day'>('day');
+  const [selectedDate, setSelectedDate] = useState(dateKey(new Date()));
+  const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
+  const {data: appointmentsData = [], isLoading} = useDoctorAppointmentsQuery();
+  const {data: linkedPatients = []} = useLinkedPatientsQuery();
 
-  // Sample schedule data
-  const schedule: DaySchedule[] = [
-    {
-      date: '2024-01-15',
-      day: 'Monday',
-      slots: [
-        {
-          id: '1',
-          time: '09:00',
-          available: false,
-          patientName: 'Priya Sharma',
-          patientId: 'P001',
-          appointmentType: 'Consultation',
-          duration: 30,
-        },
-        {
-          id: '2',
-          time: '09:30',
-          available: false,
-          patientName: 'Anjali Reddy',
-          patientId: 'P002',
-          appointmentType: 'Follow-up',
-          duration: 45,
-        },
-        {
-          id: '3',
-          time: '10:15',
-          available: true,
-          duration: 30,
-        },
-        {
-          id: '4',
-          time: '10:45',
-          available: true,
-          duration: 30,
-        },
-        {
-          id: '5',
-          time: '11:15',
-          available: false,
-          patientName: 'Meera Patel',
-          patientId: 'P003',
-          appointmentType: 'Check-up',
-          duration: 30,
-        },
-        {
-          id: '6',
-          time: '14:00',
-          available: true,
-          duration: 60,
-        },
-        {
-          id: '7',
-          time: '15:00',
-          available: true,
-          duration: 30,
-        },
-        {
-          id: '8',
-          time: '15:30',
-          available: true,
-          duration: 30,
-        },
-        {
-          id: '9',
-          time: '16:00',
-          available: false,
-          patientName: 'Kavitha Kumar',
-          patientId: 'P004',
-          appointmentType: 'Procedure',
-          duration: 60,
-        },
-      ],
-    },
-  ];
+  const patientLookup = useMemo(() => {
+    const map = new Map<string, LinkedPatient>();
+    linkedPatients.forEach(patient => {
+      map.set(patient.patientId, patient);
+    });
+    return map;
+  }, [linkedPatients]);
 
-  const currentDaySchedule = schedule.find(s => s.date === selectedDate) || schedule[0];
-  
-  const scheduleStats = {
-    totalSlots: currentDaySchedule.slots.length,
-    bookedSlots: currentDaySchedule.slots.filter(slot => !slot.available).length,
-    availableSlots: currentDaySchedule.slots.filter(slot => slot.available).length,
-    totalHours: currentDaySchedule.slots.reduce((total, slot) => total + slot.duration, 0) / 60,
-  };
+  const appointments = useMemo<AppointmentRow[]>(() => {
+    return appointmentsData.map(item => {
+      const scheduledAt = ensureDate(item.scheduledDate);
+      const patient = patientLookup.get(item.patientId);
+      return {
+        ...item,
+        scheduledAt,
+        slotKey: slotKey(scheduledAt),
+        patientName:
+          patient?.patientName ??
+          patient?.patientId ??
+          item.patientId ??
+          'Patient',
+        patientVillage: patient?.village,
+      };
+    });
+  }, [appointmentsData, patientLookup]);
 
-  const handleSlotAction = (slot: TimeSlot, action: string) => {
-    switch (action) {
-      case 'book':
-        Alert.alert('Book Slot', `Book ${slot.time} slot for new appointment?`);
-        break;
-      case 'edit':
-        Alert.alert('Edit Appointment', `Edit appointment at ${slot.time}`);
-        break;
-      case 'cancel':
-        Alert.alert('Cancel Appointment', `Cancel appointment with ${slot.patientName}?`);
-        break;
-      case 'reschedule':
-        Alert.alert('Reschedule', `Reschedule appointment with ${slot.patientName}`);
-        break;
-      case 'block':
-        Alert.alert('Block Slot', `Block ${slot.time} slot as unavailable?`);
-        break;
-    }
-  };
-
-  const getSlotColor = (slot: TimeSlot) => {
-    if (!slot.available) {
-      switch (slot.appointmentType) {
-        case 'Consultation':
-          return palette.primary;
-        case 'Follow-up':
-          return palette.success;
-        case 'Check-up':
-          return palette.info;
-        case 'Procedure':
-          return palette.warning;
-        default:
-          return palette.textSecondary;
+  const appointmentsByDate = useMemo(() => {
+    const map = new Map<string, AppointmentRow[]>();
+    appointments.forEach(appt => {
+      const key = dateKey(appt.scheduledAt);
+      if (!key) {
+        return;
       }
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)?.push(appt);
+    });
+    return map;
+  }, [appointments]);
+
+  const slotsForSelectedDay = useMemo<SlotRow[]>(() => {
+    const template = buildTemplate(selectedDate);
+    if (!template.length) {
+      return [];
     }
-    return palette.surface;
+    const dayAppointments = appointmentsByDate.get(selectedDate) ?? [];
+    const templateKeys = new Set(template.map(slot => slotKey(slot.start)));
+
+    dayAppointments.forEach(appt => {
+      if (appt.slotKey && !templateKeys.has(appt.slotKey) && appt.scheduledAt) {
+        template.push({
+          id: `${selectedDate}-${appt.slotKey}-extra`,
+          start: appt.scheduledAt,
+        });
+        templateKeys.add(appt.slotKey);
+      }
+    });
+
+    template.sort((a, b) => a.start.getTime() - b.start.getTime());
+
+    return template.map(slot => {
+      const key = slotKey(slot.start);
+      const matches = dayAppointments.filter(appt => appt.slotKey === key);
+      const label = slot.start.toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+      return {
+        id: slot.id,
+        label,
+        available: matches.length === 0,
+        appointments: matches,
+      };
+    });
+  }, [appointmentsByDate, selectedDate]);
+
+  const dayStats = useMemo(() => {
+    const totalSlots = slotsForSelectedDay.length;
+    const bookedSlots = slotsForSelectedDay.filter(slot => !slot.available).length;
+    const availableSlots = totalSlots - bookedSlots;
+    const hoursBooked =
+      (appointmentsByDate
+        .get(selectedDate)
+        ?.reduce((sum, appt) => sum + (appt.duration ?? 0), 0) ?? 0) / 60;
+    return {totalSlots, bookedSlots, availableSlots, hoursBooked};
+  }, [appointmentsByDate, selectedDate, slotsForSelectedDay]);
+
+  const weeklySummary = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Array.from({length: UPCOMING_DAYS}, (_, index) => {
+      const day = new Date(today);
+      day.setDate(today.getDate() + index);
+      const key = day.toISOString().split('T')[0];
+      const dayAppointments = appointmentsByDate.get(key) ?? [];
+      const booked = dayAppointments.length;
+      return {
+        date: key,
+        label: day.toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+        }),
+        booked,
+      };
+    });
+  }, [appointmentsByDate]);
+
+  const firstLoad = isLoading && appointmentsData.length === 0;
+
+  const handleSlotAction = (slot: SlotRow) => {
+    if (slot.available) {
+      Alert.alert(
+        'Blocked slot',
+        'Scheduling from this screen will be enabled when working hours are configured.',
+      );
+      return;
+    }
+    const appointment = slot.appointments[0];
+    Alert.alert(
+      'Visit details',
+      `${appointment.patientName}\n${getTypeLabel(appointment.type)}`,
+    );
   };
 
   return (
     <ScreenBackground>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Header Stats */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{scheduleStats.totalSlots}</Text>
-            <Text style={styles.statLabel}>Total Slots</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.success}]}>{scheduleStats.bookedSlots}</Text>
-            <Text style={styles.statLabel}>Booked</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.info}]}>{scheduleStats.availableSlots}</Text>
-            <Text style={styles.statLabel}>Available</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statNumber, {color: palette.primary}]}>{scheduleStats.totalHours.toFixed(1)}h</Text>
-            <Text style={styles.statLabel}>Total Hours</Text>
-          </View>
+      {firstLoad ? (
+        <View style={styles.loaderContainer}>
+          <ActivityIndicator size="large" color={palette.primary} />
+          <Text style={styles.loaderLabel}>Loading schedule…</Text>
         </View>
+      ) : (
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.modeRow}>
+            {VIEW_MODES.map(mode => (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.modeButton,
+                  viewMode === mode && styles.modeButtonActive,
+                ]}
+                onPress={() => setViewMode(mode)}>
+                <Text
+                  style={[
+                    styles.modeButtonLabel,
+                    viewMode === mode && styles.modeButtonLabelActive,
+                  ]}>
+                  {titleCase(mode)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
 
-        {/* Date Selector */}
-        <View style={styles.dateSection}>
-          <Text style={styles.sectionTitle}>📅 Schedule Date</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateScroll}>
-            {Array.from({length: 7}, (_, index) => {
-              const date = new Date();
-              date.setDate(date.getDate() + index);
-              const dateString = date.toISOString().split('T')[0];
-              const isSelected = dateString === selectedDate;
-              
-              return (
-                <TouchableOpacity
-                  key={dateString}
-                  style={[styles.dateCard, isSelected && styles.selectedDateCard]}
-                  onPress={() => setSelectedDate(dateString)}>
-                  <Text style={[styles.dateDay, isSelected && styles.selectedDateText]}>
-                    {date.toLocaleDateString('en-US', {weekday: 'short'})}
-                  </Text>
-                  <Text style={[styles.dateNumber, isSelected && styles.selectedDateText]}>
-                    {date.getDate()}
-                  </Text>
-                  <Text style={[styles.dateMonth, isSelected && styles.selectedDateText]}>
-                    {date.toLocaleDateString('en-US', {month: 'short'})}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        {/* View Mode Toggle */}
-        <View style={styles.viewModeSection}>
-          <View style={styles.viewModeToggle}>
-            <TouchableOpacity
-              style={[styles.viewModeButton, viewMode === 'day' && styles.activeViewMode]}
-              onPress={() => setViewMode('day')}>
-              <Text style={[styles.viewModeText, viewMode === 'day' && styles.activeViewModeText]}>
-                Day View
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{dayStats.totalSlots}</Text>
+              <Text style={styles.statLabel}>Slots</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={[styles.statValue, {color: palette.success}]}>
+                {dayStats.bookedSlots}
               </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.viewModeButton, viewMode === 'week' && styles.activeViewMode]}
-              onPress={() => setViewMode('week')}>
-              <Text style={[styles.viewModeText, viewMode === 'week' && styles.activeViewModeText]}>
-                Week View
+              <Text style={styles.statLabel}>Booked</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={[styles.statValue, {color: palette.info}]}>
+                {dayStats.availableSlots}
               </Text>
-            </TouchableOpacity>
+              <Text style={styles.statLabel}>Available</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>
+                {dayStats.hoursBooked.toFixed(1)}
+              </Text>
+              <Text style={styles.statLabel}>Hours</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => Alert.alert('New Appointment', 'Schedule a new appointment')}>
-            <Text style={styles.actionButtonText}>➕ New Appointment</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.actionButton, styles.secondaryButton]}
-            onPress={() => Alert.alert('Block Time', 'Block time slots')}>
-            <Text style={[styles.actionButtonText, styles.secondaryButtonText]}>🚫 Block Time</Text>
-          </TouchableOpacity>
-        </View>
+          <View>
+            <Text style={styles.sectionTitle}>Choose Day</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.dateScroll}>
+              {weeklySummary.map(item => {
+                const active = item.date === selectedDate;
+                return (
+                  <TouchableOpacity
+                    key={item.date}
+                    style={[
+                      styles.dateChip,
+                      active && styles.dateChipActive,
+                    ]}
+                    onPress={() => setSelectedDate(item.date)}>
+                    <Text
+                      style={[
+                        styles.dateChipLabel,
+                        active && styles.dateChipLabelActive,
+                      ]}>
+                      {item.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.dateChipCount,
+                        active && styles.dateChipLabelActive,
+                      ]}>
+                      {item.booked} booked
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
-        {/* Schedule */}
-        <View style={styles.scheduleSection}>
-          <Text style={styles.sectionTitle}>
-            🗓️ {currentDaySchedule.day} Schedule - {new Date(selectedDate).toLocaleDateString('en-US', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            })}
-          </Text>
-          
-          <View style={styles.timelineContainer}>
-            {/* Morning Sessions */}
-            <View style={styles.sessionContainer}>
-              <Text style={styles.sessionTitle}>🌅 Morning Session</Text>
-              {currentDaySchedule.slots
-                .filter(slot => parseInt(slot.time.split(':')[0]) < 12)
-                .map(slot => (
-                  <View key={slot.id} style={[styles.slotCard, {borderLeftColor: getSlotColor(slot)}]}>
+          {viewMode === 'week' ? (
+            <View style={styles.weekGrid}>
+              {weeklySummary.map(item => (
+                <View key={item.date} style={styles.weekCard}>
+                  <Text style={styles.weekLabel}>{item.label}</Text>
+                  <Text style={styles.weekValue}>{item.booked}</Text>
+                  <Text style={styles.weekMeta}>booked visits</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <View>
+              <Text style={styles.sectionTitle}>Timeline</Text>
+              {slotsForSelectedDay.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Text style={styles.emptyTitle}>No working hours yet</Text>
+                  <Text style={styles.emptyCopy}>
+                    Define schedule slots to start accepting bookings.
+                  </Text>
+                </View>
+              ) : (
+                slotsForSelectedDay.map(slot => (
+                  <TouchableOpacity
+                    key={slot.id}
+                    style={[
+                      styles.slotCard,
+                      !slot.available && styles.slotBusy,
+                    ]}
+                    onPress={() => handleSlotAction(slot)}>
                     <View style={styles.slotHeader}>
-                      <View style={styles.slotTime}>
-                        <Text style={styles.timeText}>{slot.time}</Text>
-                        <Text style={styles.durationText}>{slot.duration} min</Text>
-                      </View>
-                      
-                      <View style={styles.slotStatus}>
-                        {slot.available ? (
-                          <View style={styles.availableBadge}>
-                            <Text style={styles.availableText}>Available</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.bookedBadge}>
-                            <Text style={styles.bookedText}>Booked</Text>
-                          </View>
-                        )}
-                      </View>
-                    </View>
-                    
-                    {!slot.available && (
-                      <View style={styles.appointmentDetails}>
-                        <Text style={styles.patientName}>{slot.patientName}</Text>
-                        <Text style={styles.patientId}>ID: {slot.patientId}</Text>
-                        <Text style={styles.appointmentType}>{slot.appointmentType}</Text>
-                      </View>
-                    )}
-                    
-                    <View style={styles.slotActions}>
-                      {slot.available ? (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.bookBtn]}
-                            onPress={() => handleSlotAction(slot, 'book')}>
-                            <Text style={styles.actionBtnText}>📅 Book</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.blockBtn]}
-                            onPress={() => handleSlotAction(slot, 'block')}>
-                            <Text style={styles.actionBtnText}>🚫 Block</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.editBtn]}
-                            onPress={() => handleSlotAction(slot, 'edit')}>
-                            <Text style={styles.actionBtnText}>✏️ Edit</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.rescheduleBtn]}
-                            onPress={() => handleSlotAction(slot, 'reschedule')}>
-                            <Text style={styles.actionBtnText}>🔄 Reschedule</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.cancelBtn]}
-                            onPress={() => handleSlotAction(slot, 'cancel')}>
-                            <Text style={styles.actionBtnText}>❌ Cancel</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-                  </View>
-                ))}
-            </View>
-            
-            {/* Afternoon Sessions */}
-            <View style={styles.sessionContainer}>
-              <Text style={styles.sessionTitle}>🌞 Afternoon Session</Text>
-              {currentDaySchedule.slots
-                .filter(slot => parseInt(slot.time.split(':')[0]) >= 12)
-                .map(slot => (
-                  <View key={slot.id} style={[styles.slotCard, {borderLeftColor: getSlotColor(slot)}]}>
-                    <View style={styles.slotHeader}>
-                      <View style={styles.slotTime}>
-                        <Text style={styles.timeText}>{slot.time}</Text>
-                        <Text style={styles.durationText}>{slot.duration} min</Text>
-                      </View>
-                      
-                      <View style={styles.slotStatus}>
-                        {slot.available ? (
-                          <View style={styles.availableBadge}>
-                            <Text style={styles.availableText}>Available</Text>
-                          </View>
-                        ) : (
-                          <View style={styles.bookedBadge}>
-                            <Text style={styles.bookedText}>Booked</Text>
-                          </View>
-                        )}
+                      <Text style={styles.slotTime}>{slot.label}</Text>
+                      <View
+                        style={[
+                          styles.slotBadge,
+                          slot.available
+                            ? styles.slotBadgeAvailable
+                            : styles.slotBadgeBusy,
+                        ]}>
+                        <Text
+                          style={[
+                            styles.slotBadgeLabel,
+                            !slot.available && styles.slotBadgeLabelBusy,
+                          ]}>
+                          {slot.available ? 'Available' : 'Booked'}
+                        </Text>
                       </View>
                     </View>
-                    
-                    {!slot.available && (
-                      <View style={styles.appointmentDetails}>
-                        <Text style={styles.patientName}>{slot.patientName}</Text>
-                        <Text style={styles.patientId}>ID: {slot.patientId}</Text>
-                        <Text style={styles.appointmentType}>{slot.appointmentType}</Text>
+                    {!slot.available ? (
+                      <View>
+                        {slot.appointments.map(appt => (
+                          <View key={appt.id} style={styles.slotDetails}>
+                            <Text style={styles.slotPatient}>
+                              {appt.patientName}
+                            </Text>
+                            <Text style={styles.slotMeta}>
+                              {getTypeLabel(appt.type)}
+                            </Text>
+                            {appt.patientVillage ? (
+                              <Text style={styles.slotMeta}>
+                                {appt.patientVillage}
+                              </Text>
+                            ) : null}
+                          </View>
+                        ))}
                       </View>
-                    )}
-                    
-                    <View style={styles.slotActions}>
-                      {slot.available ? (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.bookBtn]}
-                            onPress={() => handleSlotAction(slot, 'book')}>
-                            <Text style={styles.actionBtnText}>📅 Book</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.blockBtn]}
-                            onPress={() => handleSlotAction(slot, 'block')}>
-                            <Text style={styles.actionBtnText}>🚫 Block</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : (
-                        <>
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.editBtn]}
-                            onPress={() => handleSlotAction(slot, 'edit')}>
-                            <Text style={styles.actionBtnText}>✏️ Edit</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.rescheduleBtn]}
-                            onPress={() => handleSlotAction(slot, 'reschedule')}>
-                            <Text style={styles.actionBtnText}>🔄 Reschedule</Text>
-                          </TouchableOpacity>
-                          
-                          <TouchableOpacity
-                            style={[styles.actionBtn, styles.cancelBtn]}
-                            onPress={() => handleSlotAction(slot, 'cancel')}>
-                            <Text style={styles.actionBtnText}>❌ Cancel</Text>
-                          </TouchableOpacity>
-                        </>
-                      )}
-                    </View>
-                  </View>
-                ))}
+                    ) : null}
+                  </TouchableOpacity>
+                ))
+              )}
             </View>
-          </View>
-        </View>
-
-        {/* Schedule Summary */}
-        <View style={styles.summarySection}>
-          <Text style={styles.sectionTitle}>📊 Daily Summary</Text>
-          <View style={styles.summaryCard}>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Working Hours:</Text>
-              <Text style={styles.summaryValue}>9:00 AM - 5:00 PM</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Total Appointments:</Text>
-              <Text style={styles.summaryValue}>{scheduleStats.bookedSlots}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Available Slots:</Text>
-              <Text style={styles.summaryValue}>{scheduleStats.availableSlots}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Utilization:</Text>
-              <Text style={styles.summaryValue}>
-                {((scheduleStats.bookedSlots / scheduleStats.totalSlots) * 100).toFixed(1)}%
-              </Text>
-            </View>
-          </View>
-        </View>
-      </ScrollView>
+          )}
+        </ScrollView>
+      )}
     </ScreenBackground>
   );
 };
@@ -438,142 +404,151 @@ const DoctorScheduleScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: spacing.md,
   },
-  statsContainer: {
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  loaderContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  loaderLabel: {
+    marginTop: spacing.md,
+    color: palette.textSecondary,
+  },
+  modeRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginVertical: spacing.lg,
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+    alignItems: 'center',
+  },
+  modeButtonActive: {
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
+  },
+  modeButtonLabel: {
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  modeButtonLabelActive: {
+    color: palette.textOnPrimary,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
   },
   statCard: {
+    flex: 1,
     backgroundColor: palette.card,
     borderRadius: radii.md,
     padding: spacing.md,
     alignItems: 'center',
-    flex: 1,
-    marginHorizontal: spacing.xs,
   },
-  statNumber: {
+  statValue: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: palette.textPrimary,
-    marginBottom: spacing.xs,
   },
   statLabel: {
     fontSize: 12,
     color: palette.textSecondary,
-    textAlign: 'center',
-  },
-  dateSection: {
-    marginBottom: spacing.lg,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: palette.textPrimary,
-    marginBottom: spacing.md,
-  },
-  dateScroll: {
-    flexDirection: 'row',
-  },
-  dateCard: {
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.md,
-    marginRight: spacing.sm,
-    alignItems: 'center',
-    minWidth: 70,
-  },
-  selectedDateCard: {
-    backgroundColor: palette.primary,
-  },
-  dateDay: {
-    fontSize: 12,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  dateNumber: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: palette.textPrimary,
-    marginBottom: spacing.xs,
-  },
-  dateMonth: {
-    fontSize: 10,
-    color: palette.textSecondary,
-  },
-  selectedDateText: {
-    color: palette.textOnPrimary,
-  },
-  viewModeSection: {
-    marginBottom: spacing.lg,
-  },
-  viewModeToggle: {
-    flexDirection: 'row',
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.xs,
-  },
-  viewModeButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRadius: radii.sm,
-  },
-  activeViewMode: {
-    backgroundColor: palette.primary,
-  },
-  viewModeText: {
-    color: palette.textSecondary,
-    fontWeight: '600',
-  },
-  activeViewModeText: {
-    color: palette.textOnPrimary,
-  },
-  quickActions: {
-    flexDirection: 'row',
-    marginBottom: spacing.lg,
-  },
-  actionButton: {
-    backgroundColor: palette.primary,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    marginRight: spacing.md,
-    flex: 1,
-    alignItems: 'center',
-  },
-  secondaryButton: {
-    backgroundColor: palette.card,
-  },
-  actionButtonText: {
-    color: palette.textOnPrimary,
-    fontWeight: '600',
-  },
-  secondaryButtonText: {
-    color: palette.textPrimary,
-  },
-  scheduleSection: {
-    marginBottom: spacing.xl,
-  },
-  timelineContainer: {
-    gap: spacing.lg,
-  },
-  sessionContainer: {
-    marginBottom: spacing.lg,
-  },
-  sessionTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: palette.textPrimary,
-    marginBottom: spacing.md,
+    marginBottom: spacing.xs,
   },
-  slotCard: {
+  dateScroll: {
+    marginBottom: spacing.lg,
+  },
+  dateChip: {
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    padding: spacing.sm,
+    marginRight: spacing.sm,
+  },
+  dateChipActive: {
+    backgroundColor: palette.primary,
+    borderColor: palette.primary,
+  },
+  dateChipLabel: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  dateChipLabelActive: {
+    color: palette.textOnPrimary,
+  },
+  dateChipCount: {
+    fontSize: 11,
+    color: palette.textSecondary,
+  },
+  weekGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  weekCard: {
+    width: '48%',
     backgroundColor: palette.card,
     borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  weekLabel: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  weekValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  weekMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  emptyState: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.md,
     padding: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: palette.textPrimary,
+  },
+  emptyCopy: {
+    marginTop: spacing.xs,
+    fontSize: 13,
+    color: palette.textSecondary,
+    textAlign: 'center',
+  },
+  slotCard: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
     marginBottom: spacing.sm,
+    backgroundColor: palette.card,
+  },
+  slotBusy: {
     borderLeftWidth: 4,
+    borderLeftColor: palette.primary,
   },
   slotHeader: {
     flexDirection: 'row',
@@ -582,116 +557,40 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   slotTime: {
-    alignItems: 'center',
-  },
-  timeText: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: palette.primary,
-    marginBottom: spacing.xs,
-  },
-  durationText: {
-    fontSize: 12,
-    color: palette.textSecondary,
-  },
-  slotStatus: {
-    alignItems: 'flex-end',
-  },
-  availableBadge: {
-    backgroundColor: palette.success,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  bookedBadge: {
-    backgroundColor: palette.warning,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  availableText: {
-    color: palette.textOnPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  bookedText: {
-    color: palette.textOnPrimary,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  appointmentDetails: {
-    marginBottom: spacing.sm,
-  },
-  patientName: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: palette.textPrimary,
-    marginBottom: spacing.xs,
   },
-  patientId: {
-    fontSize: 12,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs,
-  },
-  appointmentType: {
-    fontSize: 14,
-    color: palette.primary,
-    fontWeight: '500',
-  },
-  slotActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing.sm,
-  },
-  actionBtn: {
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
+  slotBadge: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
-    marginRight: spacing.xs,
-    marginBottom: spacing.xs,
   },
-  bookBtn: {
+  slotBadgeAvailable: {
     backgroundColor: palette.success,
   },
-  blockBtn: {
-    backgroundColor: palette.textSecondary,
-  },
-  editBtn: {
-    backgroundColor: palette.info,
-  },
-  rescheduleBtn: {
+  slotBadgeBusy: {
     backgroundColor: palette.warning,
   },
-  cancelBtn: {
-    backgroundColor: palette.danger,
-  },
-  actionBtnText: {
+  slotBadgeLabel: {
     color: palette.textOnPrimary,
+    fontWeight: '600',
     fontSize: 12,
-    fontWeight: '500',
   },
-  summarySection: {
-    marginBottom: spacing.xl,
+  slotBadgeLabelBusy: {
+    color: palette.textOnPrimary,
   },
-  summaryCard: {
-    backgroundColor: palette.card,
-    borderRadius: radii.md,
-    padding: spacing.lg,
+  slotDetails: {
+    marginTop: spacing.xs,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: palette.textSecondary,
-  },
-  summaryValue: {
-    fontSize: 14,
+  slotPatient: {
+    fontSize: 15,
     fontWeight: '600',
     color: palette.textPrimary,
+  },
+  slotMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
   },
 });
 

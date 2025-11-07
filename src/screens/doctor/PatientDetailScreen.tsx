@@ -27,7 +27,13 @@ import {
   useSyncPatientDetail,
   useSyncPatientsList,
 } from '../../features/patients/usePatientsSync';
-import { ReadingPayload } from '../../features/patients/types'; // Update the path to the correct module
+import {ReadingPayload, DoctorReview} from '../../types/models';
+import {useDoctorReviewsQuery} from '../../features/doctorReviews/queries';
+import {
+  useArchiveDoctorReviewMutation,
+  useCreateDoctorReviewMutation,
+  useUpdateDoctorReviewMutation,
+} from '../../features/doctorReviews/mutations';
 import {usePatientReadings} from '../../hooks/usePatientReadings';
 import {useAppStore} from '../../store/useAppStore';
 import {useReadingStore} from '../../store/useReadingStore';
@@ -69,6 +75,28 @@ export const PatientDetailScreen: React.FC = () => {
   const [reportPeriodStart, setReportPeriodStart] = useState('');
   const [reportPeriodEnd, setReportPeriodEnd] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
+  const {data: doctorReviews = [], isLoading: reviewsLoading} =
+    useDoctorReviewsQuery(params.patientId, doctorId);
+  const createReviewMutation = useCreateDoctorReviewMutation(
+    params.patientId,
+    doctorId ?? '',
+    doctorId,
+  );
+  const archiveReviewMutation = useArchiveDoctorReviewMutation(
+    params.patientId,
+    doctorId,
+  );
+  const updateReviewMutation = useUpdateDoctorReviewMutation(
+    params.patientId,
+    doctorId,
+    doctorId,
+  );
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewTitle, setReviewTitle] = useState('');
+  const [reviewSummary, setReviewSummary] = useState('');
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [reviewAttachmentsInput, setReviewAttachmentsInput] = useState('');
+  const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
 
   const loadReports = useCallback(async () => {
     try {
@@ -107,6 +135,24 @@ export const PatientDetailScreen: React.FC = () => {
   const handleCloseReportModal = () => {
     setReportModalVisible(false);
     resetReportForm();
+  };
+
+  const resetReviewForm = () => {
+    setReviewTitle('');
+    setReviewSummary('');
+    setReviewNotes('');
+    setReviewAttachmentsInput('');
+    setEditingReviewId(null);
+  };
+
+  const handleOpenReviewModal = () => {
+    resetReviewForm();
+    setReviewModalVisible(true);
+  };
+
+  const handleCloseReviewModal = () => {
+    setReviewModalVisible(false);
+    resetReviewForm();
   };
 
   const handleSubmitReport = async () => {
@@ -149,6 +195,82 @@ export const PatientDetailScreen: React.FC = () => {
     } finally {
       setSubmittingReport(false);
     }
+  };
+
+  const handleSubmitReview = async () => {
+    if (!doctorId) {
+      Alert.alert('Not signed in', 'Please sign in again to add reviews.');
+      return;
+    }
+    if (!reviewTitle.trim() || !reviewNotes.trim()) {
+      Alert.alert('Missing details', 'Please add a title and detailed notes.');
+      return;
+    }
+    const attachments = reviewAttachmentsInput
+      .split(/\r?\n/)
+      .map(item => item.trim())
+      .filter(Boolean);
+    try {
+      if (editingReviewId) {
+        await updateReviewMutation.mutateAsync({
+          reviewId: editingReviewId,
+          payload: {
+            title: reviewTitle.trim(),
+            summary: reviewSummary.trim() || undefined,
+            notes: reviewNotes.trim(),
+            attachments,
+            status: 'submitted',
+          },
+        });
+      } else {
+        await createReviewMutation.mutateAsync({
+          title: reviewTitle.trim(),
+          summary: reviewSummary.trim() || undefined,
+          notes: reviewNotes.trim(),
+          attachments,
+          status: 'submitted',
+        });
+      }
+      handleCloseReviewModal();
+    } catch (error) {
+      Alert.alert(
+        'Unable to save review',
+        error instanceof Error ? error.message : 'Please try again later.',
+      );
+    }
+  };
+
+  const handleArchiveReview = (review: DoctorReview) => {
+    Alert.alert(
+      'Archive review?',
+      'This will hide the note from the active list.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await archiveReviewMutation.mutateAsync(review.id);
+            } catch (error) {
+              Alert.alert(
+                'Unable to archive',
+                error instanceof Error ? error.message : 'Please try again.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleEditReview = (review: DoctorReview) => {
+    setReviewTitle(review.title);
+    setReviewSummary(review.summary ?? '');
+    setReviewNotes(review.notes ?? '');
+    setReviewAttachmentsInput((review.attachments ?? []).join('\n'));
+    setEditingReviewId(review.id);
+    setReviewModalVisible(true);
   };
 
   const heartRateSeries = useMemo(
@@ -269,6 +391,96 @@ export const PatientDetailScreen: React.FC = () => {
           />
         </View>
 
+
+        <View style={styles.reviewSection}>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.reviewTitleText}>Doctor Reviews</Text>
+              <Text style={styles.reviewSubtitle}>
+                Notes shared with the patient after each consultation
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[
+                styles.reviewButton,
+                (!doctorId || createReviewMutation.isPending) && styles.disabled,
+              ]}
+              onPress={handleOpenReviewModal}
+              disabled={!doctorId || createReviewMutation.isPending}>
+              <Text style={styles.reviewButtonLabel}>New review</Text>
+            </TouchableOpacity>
+          </View>
+
+          {reviewsLoading ? (
+            <View style={styles.reportLoading}>
+              <ActivityIndicator size="small" color={palette.primary} />
+              <Text style={styles.reportLoadingText}>Loading reviews...</Text>
+            </View>
+          ) : doctorReviews?.length ? (
+            doctorReviews.map(review => (
+              <View key={review.id} style={styles.reviewCard}>
+                <View style={styles.reviewCardHeader}>
+                  <View>
+                    <Text style={styles.reviewCardTitle}>{review.title}</Text>
+                    <Text style={styles.reviewMeta}>
+                      Updated {formatDateTime(review.updatedAt)}
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.reviewStatus,
+                      review.status === 'submitted'
+                        ? styles.reviewStatusSubmitted
+                        : review.status === 'draft'
+                        ? styles.reviewStatusDraft
+                        : styles.reviewStatusArchived,
+                    ]}>
+                    <Text style={styles.reviewStatusLabel}>{review.status}</Text>
+                  </View>
+                </View>
+                {review.summary ? (
+                  <Text style={styles.reviewSummary}>{review.summary}</Text>
+                ) : null}
+                <Text style={styles.reviewNotes}>{review.notes}</Text>
+                {review.attachments?.length ? (
+                  <View style={styles.reviewAttachments}>
+                    {review.attachments.map(link => (
+                      <Text key={link} style={styles.reviewAttachment}>
+                        {link}
+                      </Text>
+                    ))}
+                  </View>
+                ) : null}
+                <View style={styles.reviewActions}>
+                  <Text style={styles.reviewMeta}>
+                    Created {formatDateTime(review.createdAt)}
+                  </Text>
+                  <View style={styles.reviewActionButtons}>
+                    <TouchableOpacity
+                      style={styles.reviewEditButton}
+                      onPress={() => handleEditReview(review)}
+                      disabled={updateReviewMutation.isPending}>
+                      <Text style={styles.reviewEditLabel}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.reviewArchiveButton}
+                      onPress={() => handleArchiveReview(review)}
+                      disabled={archiveReviewMutation.isPending}>
+                      <Text style={styles.reviewArchiveLabel}>Archive</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={styles.reportEmptyState}>
+              <Text style={styles.reviewEmptyTitle}>No doctor reviews yet</Text>
+              <Text style={styles.reviewEmptyCopy}>
+                Capture visit notes here to keep the patient and ASHA workers informed.
+              </Text>
+            </View>
+          )}
+        </View>
         <View style={styles.rangeRow}>
           {ranges.map(item => {
             const active = range.key === item.key;
@@ -486,6 +698,92 @@ export const PatientDetailScreen: React.FC = () => {
         </View>
       </ScrollView>
       <Modal
+        visible={reviewModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={handleCloseReviewModal}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              {editingReviewId ? 'Edit doctor review' : 'Add doctor review'}
+            </Text>
+            <Text style={styles.modalSubtitle}>
+              Share consultation notes that will be visible to the patient.
+            </Text>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Title</Text>
+              <TextInput
+                placeholder="e.g. Week 24 check-in"
+                placeholderTextColor={palette.textSecondary}
+                style={styles.modalInput}
+                value={reviewTitle}
+                onChangeText={setReviewTitle}
+              />
+            </View>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Summary (optional)</Text>
+              <TextInput
+                placeholder="High-level summary"
+                placeholderTextColor={palette.textSecondary}
+                style={styles.modalInput}
+                value={reviewSummary}
+                onChangeText={setReviewSummary}
+              />
+            </View>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Detailed notes</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalTextarea]}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                placeholder="Observations, escalations, and next steps"
+                placeholderTextColor={palette.textSecondary}
+                value={reviewNotes}
+                onChangeText={setReviewNotes}
+              />
+            </View>
+            <View style={styles.modalField}>
+              <Text style={styles.inputLabel}>Attachment links (one per line)</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalTextarea]}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+                placeholder="https://example.com/report.pdf"
+                placeholderTextColor={palette.textSecondary}
+                value={reviewAttachmentsInput}
+                onChangeText={setReviewAttachmentsInput}
+              />
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondary]}
+                onPress={handleCloseReviewModal}
+                disabled={createReviewMutation.isPending}>
+                <Text style={styles.modalSecondaryLabel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalPrimary,
+                  createReviewMutation.isPending && styles.disabled,
+                ]}
+                onPress={handleSubmitReview}
+                disabled={createReviewMutation.isPending}>
+                {createReviewMutation.isPending ? (
+                  <ActivityIndicator size="small" color={palette.textOnPrimary} />
+                ) : (
+              <Text style={styles.modalPrimaryLabel}>
+                {editingReviewId ? 'Update review' : 'Save review'}
+              </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
         visible={reportModalVisible}
         animationType="slide"
         transparent
@@ -641,6 +939,45 @@ const styles = StyleSheet.create({
   tilesRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  reviewSection: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: radii.lg,
+    backgroundColor: palette.surface,
+    shadowColor: palette.shadow,
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    elevation: 5,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  reviewTitleText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  reviewSubtitle: {
+    marginTop: 2,
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  reviewButton: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.pill,
+    backgroundColor: palette.primary,
+  },
+  reviewButtonLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
   },
   rangeRow: {
     flexDirection: 'row',
@@ -683,6 +1020,118 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: palette.textPrimary,
     marginBottom: spacing.sm,
+  },
+  reviewCard: {
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: palette.surfaceSoft,
+  },
+  reviewCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  reviewCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: palette.textPrimary,
+  },
+  reviewMeta: {
+    fontSize: 12,
+    color: palette.textSecondary,
+  },
+  reviewStatus: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+  },
+  reviewStatusSubmitted: {
+    backgroundColor: palette.success + '22',
+  },
+  reviewStatusDraft: {
+    backgroundColor: palette.warning + '22',
+  },
+  reviewStatusArchived: {
+    backgroundColor: palette.border,
+  },
+  reviewStatusLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    textTransform: 'uppercase',
+  },
+  reviewSummary: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  reviewNotes: {
+    fontSize: 13,
+    color: palette.textSecondary,
+    marginBottom: spacing.sm,
+    lineHeight: 18,
+  },
+  reviewAttachments: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  reviewAttachment: {
+    fontSize: 11,
+    color: palette.primary,
+    backgroundColor: palette.primary + '12',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs / 2,
+    borderRadius: radii.pill,
+  },
+  reviewActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  reviewActionButtons: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  reviewEditButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.primary,
+  },
+  reviewEditLabel: {
+    color: palette.primary,
+    fontWeight: '600',
+  },
+  reviewArchiveButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  reviewArchiveLabel: {
+    fontSize: 12,
+    color: palette.textSecondary,
+    fontWeight: '600',
+  },
+  reviewEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: palette.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  reviewEmptyCopy: {
+    fontSize: 13,
+    color: palette.textSecondary,
   },
   monthlyReportSection: {
     marginTop: spacing.xl,
