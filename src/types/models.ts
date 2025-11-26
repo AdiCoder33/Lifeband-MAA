@@ -3,6 +3,14 @@ export type UserRole = 'patient' | 'doctor' | 'asha';
 
 export type DoctorPatientLinkStatus = 'pending' | 'active' | 'revoked';
 
+export interface PregnancyProfile {
+  monthsPregnant: number;
+  extraDays?: number;
+  preferredCheckupTime?: string;
+  currentWeightKg?: number;
+  recordedAt: string;
+}
+
 export interface PatientSummary {
   id: string;
   name: string;
@@ -11,6 +19,7 @@ export interface PatientSummary {
   village?: string;
   riskLevel?: RiskLevel;
   lastReadingAt?: string;
+  pregnancy?: PregnancyProfile;
 }
 
 export interface PatientDetail extends PatientSummary {
@@ -149,6 +158,7 @@ export interface PatientCreatePayload {
   assignedDoctorIds?: string[];
   assignedAshaIds?: string[];
   userId?: string;
+  pregnancy?: PregnancyProfile;
 }
 
 export interface PatientUpdatePayload extends Partial<PatientCreatePayload> {

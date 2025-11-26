@@ -1,5 +1,5 @@
 import { FirebaseAuth, FirebaseFirestore, Collections, User } from './config';
-import { UserRole } from '../../types/models';
+import { PregnancyProfile, UserRole } from '../../types/models';
 
 export interface FirebaseUser {
   uid: string;
@@ -8,6 +8,7 @@ export interface FirebaseUser {
   role: UserRole;
   phone?: string;
   profilePicture?: string;
+  pregnancy?: PregnancyProfile;
   createdAt: Date;
   lastLoginAt: Date;
   isActive: boolean;

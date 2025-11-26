@@ -45,6 +45,7 @@ const buildSummary = (
     village: data.village ?? data.addressVillage,
     riskLevel: toRiskLevel(data.riskLevel),
     lastReadingAt: data.lastReadingAt,
+    pregnancy: data.pregnancy,
   };
 };
 
@@ -57,6 +58,7 @@ const buildDetail = (
     ...summary,
     phone: data.phone ?? data.phoneNumber,
     notes: data.notes ?? data.clinicalNotes,
+    pregnancy: data.pregnancy ?? summary.pregnancy,
   };
 };
 
@@ -186,6 +188,38 @@ class PatientService {
     await docRef.set(prepared, {merge: true});
     const fresh = await docRef.get();
     return buildDetail(fresh);
+  }
+
+  static async savePregnancyProfile(
+    patientId: string,
+    pregnancy: NonNullable<PatientDetail['pregnancy']>,
+  ): Promise<NonNullable<PatientDetail['pregnancy']>> {
+    const profile = {
+      ...pregnancy,
+      recordedAt: pregnancy.recordedAt ?? new Date().toISOString(),
+    };
+
+    await patientsCollection()
+      .doc(patientId)
+      .set(
+        {
+          pregnancy: profile,
+        },
+        {merge: true},
+      );
+
+    await FirebaseFirestore()
+      .collection(Collections.USERS)
+      .doc(patientId)
+      .set(
+        {
+          pregnancy: profile,
+        },
+        {merge: true},
+      );
+
+    const snapshot = await patientsCollection().doc(patientId).get();
+    return (snapshot.data() as Record<string, any> | undefined)?.pregnancy ?? profile;
   }
 
   static async archivePatient(patientId: string): Promise<void> {

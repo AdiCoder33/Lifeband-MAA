@@ -16,7 +16,9 @@ import {useAuth} from '../context/AuthContext';
 import {useAppStore} from '../store/useAppStore';
 import {usePatientReadings} from '../hooks/usePatientReadings';
 import DoctorPatientLinkService from '../services/firebase/DoctorPatientLinkService';
-import {LinkedDoctor, MonthlyReportSummary} from '../types/models';
+import PatientService from '../services/firebase/PatientService';
+import PregnancyIntakeModal from '../components/PregnancyIntakeModal';
+import {LinkedDoctor, MonthlyReportSummary, PregnancyProfile} from '../types/models';
 import {useFirebaseHealth} from '../services/hooks/useFirebaseHealth';
 import type {MedicineEntry} from '../services/firebase/health';
 import {palette, radii, spacing} from '../theme';
@@ -26,7 +28,7 @@ const chartWidth = screenWidth - 80; // Account for padding and margins
 
 export const PatientHomeScreen: React.FC = () => {
   const navigation = useNavigation();
-  const {name, identifier, user} = useAuth();
+  const {name, identifier, user, role} = useAuth();
   const patientUid = user?.uid ?? (typeof identifier === 'string' ? identifier : undefined);
   const selectedPatient = useAppStore(state => state.selectedPatientId);
   const readings = usePatientReadings(selectedPatient ?? patientUid ?? identifier, {
@@ -41,6 +43,9 @@ export const PatientHomeScreen: React.FC = () => {
   const [careTeamLoading, setCareTeamLoading] = useState(false);
   const [linkedDoctors, setLinkedDoctors] = useState<LinkedDoctor[]>([]);
   const [recentReports, setRecentReports] = useState<MonthlyReportSummary[]>([]);
+  const [pregnancyProfile, setPregnancyProfile] = useState<PregnancyProfile | null>(null);
+  const [showPregnancyModal, setShowPregnancyModal] = useState(false);
+  const [savingPregnancy, setSavingPregnancy] = useState(false);
 
   const loadCareTeam = useCallback(async () => {
     if (!patientUid) {
@@ -64,6 +69,26 @@ export const PatientHomeScreen: React.FC = () => {
   useEffect(() => {
     loadCareTeam();
   }, [loadCareTeam]);
+
+  useEffect(() => {
+    const loadPregnancyProfile = async () => {
+      if (role !== 'Patient' || !patientUid) {
+        return;
+      }
+      try {
+        const detail = await PatientService.getPatientDetail(patientUid);
+        if (detail?.pregnancy) {
+          setPregnancyProfile(detail.pregnancy);
+        } else {
+          setShowPregnancyModal(true);
+        }
+      } catch (error) {
+        console.log('Failed to load pregnancy profile', error);
+      }
+    };
+
+    loadPregnancyProfile();
+  }, [patientUid, role]);
 
   const loadMedicines = useCallback(async () => {
     try {
@@ -156,6 +181,35 @@ export const PatientHomeScreen: React.FC = () => {
     );
   };
 
+  const handlePregnancySubmit = useCallback(
+    async (payload: Omit<PregnancyProfile, 'recordedAt'>) => {
+      if (!patientUid) {
+        return;
+      }
+      try {
+        setSavingPregnancy(true);
+        const saved = await PatientService.savePregnancyProfile(patientUid, {
+          ...payload,
+          recordedAt: new Date().toISOString(),
+        });
+        setPregnancyProfile(saved);
+        setShowPregnancyModal(false);
+      } catch (error) {
+        Alert.alert(
+          'Could not save',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      } finally {
+        setSavingPregnancy(false);
+      }
+    },
+    [patientUid],
+  );
+
+  const openPregnancyModal = useCallback(() => {
+    setShowPregnancyModal(true);
+  }, []);
+
 
   const summary = useMemo(
     () => ({
@@ -220,6 +274,29 @@ export const PatientHomeScreen: React.FC = () => {
     [readings],
   );
 
+  const pregnancyStats = useMemo(() => {
+    if (!pregnancyProfile) {
+      return null;
+    }
+    const totalDays =
+      Math.max(0, (pregnancyProfile.monthsPregnant ?? 0) * 30) +
+      Math.max(0, pregnancyProfile.extraDays ?? 0);
+    const weeks = Math.floor(totalDays / 7);
+    const remainderDays = totalDays % 7;
+    const daysLeft = Math.max(0, 280 - totalDays);
+    const trimester =
+      weeks < 13 ? '1st Trimester' : weeks < 28 ? '2nd Trimester' : '3rd Trimester';
+
+    return {
+      weeks,
+      remainderDays,
+      daysLeft,
+      trimester,
+      weight: pregnancyProfile.currentWeightKg,
+      checkupTime: pregnancyProfile.preferredCheckupTime,
+    };
+  }, [pregnancyProfile]);
+
   const handleManageCareTeam = useCallback(() => {
     (navigation as any).navigate('LinkDoctor');
   }, [navigation]);
@@ -234,24 +311,53 @@ export const PatientHomeScreen: React.FC = () => {
         {/* Pregnancy Tracking Section */}
         <View style={styles.pregnancySection}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>🤰 Pregnancy Journey</Text>
-            <Text style={styles.sectionSubtitle}>Track your beautiful journey</Text>
+            <View>
+              <Text style={styles.sectionTitle}>🤰 Pregnancy Journey</Text>
+              <Text style={styles.sectionSubtitle}>
+                {pregnancyProfile
+                  ? `You reported ${pregnancyProfile.monthsPregnant} months${pregnancyProfile.extraDays ? ` + ${pregnancyProfile.extraDays} days` : ''}`
+                  : 'Tell us your stage to personalise your care plan'}
+              </Text>
+            </View>
+            {role === 'Patient' ? (
+              <TouchableOpacity onPress={openPregnancyModal}>
+                <Text style={styles.sectionAction}>Update</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
           <View style={styles.pregnancyStats}>
             <View style={styles.pregnancyStatCard}>
-              <Text style={styles.pregnancyStatNumber}>28</Text>
+              <Text style={styles.pregnancyStatNumber}>
+                {pregnancyStats ? pregnancyStats.weeks : '--'}
+              </Text>
               <Text style={styles.pregnancyStatLabel}>Weeks</Text>
-              <Text style={styles.pregnancyStatSub}>2nd Trimester</Text>
+              <Text style={styles.pregnancyStatSub}>
+                {pregnancyStats
+                  ? `${pregnancyStats.remainderDays} days this week · ${pregnancyStats.trimester}`
+                  : 'Share your details to start tracking'}
+              </Text>
             </View>
             <View style={styles.pregnancyStatCard}>
-              <Text style={styles.pregnancyStatNumber}>84</Text>
+              <Text style={styles.pregnancyStatNumber}>
+                {pregnancyStats ? pregnancyStats.daysLeft : '--'}
+              </Text>
               <Text style={styles.pregnancyStatLabel}>Days Left</Text>
-              <Text style={styles.pregnancyStatSub}>Almost there!</Text>
+              <Text style={styles.pregnancyStatSub}>
+                {pregnancyStats?.checkupTime
+                  ? `Preferred checkup time ${pregnancyStats.checkupTime}`
+                  : 'We will tailor reminders after you share'}
+              </Text>
             </View>
             <View style={styles.pregnancyStatCard}>
-              <Text style={styles.pregnancyStatNumber}>12.5</Text>
-              <Text style={styles.pregnancyStatLabel}>kg Gained</Text>
-              <Text style={styles.pregnancyStatSub}>Healthy range</Text>
+              <Text style={styles.pregnancyStatNumber}>
+                {pregnancyStats?.weight ? pregnancyStats.weight : '--'}
+              </Text>
+              <Text style={styles.pregnancyStatLabel}>Current weight (kg)</Text>
+              <Text style={styles.pregnancyStatSub}>
+                {pregnancyStats?.weight
+                  ? 'Keep checking weekly to track gain'
+                  : 'Add your weight to get guidance'}
+              </Text>
             </View>
           </View>
         </View>
@@ -709,6 +815,12 @@ export const PatientHomeScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
+      <PregnancyIntakeModal
+        visible={showPregnancyModal && role === 'Patient'}
+        loading={savingPregnancy}
+        onClose={() => setShowPregnancyModal(false)}
+        onSubmit={handlePregnancySubmit}
+      />
     </ScreenBackground>
   );
 };

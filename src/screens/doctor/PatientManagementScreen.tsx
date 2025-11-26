@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   Modal,
+  Share,
   ScrollView,
   StyleSheet,
   Text,
@@ -10,10 +11,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
 import ScreenBackground from '../../components/ScreenBackground';
 import {palette, radii, spacing} from '../../theme';
 import {useLinkedPatientsQuery} from '../../features/doctor/queries';
-import type {LinkedPatient} from '../../types/models';
+import DoctorPatientLinkService from '../../services/firebase/DoctorPatientLinkService';
+import {useAuth} from '../../context/AuthContext';
+import type {DoctorInvite, LinkedPatient} from '../../types/models';
 
 type PatientPriority = 'low' | 'medium' | 'high';
 type PatientStatus = LinkedPatient['status'];
@@ -87,6 +91,8 @@ const formatDate = (value?: string) => {
 };
 
 const PatientManagementScreen: React.FC = () => {
+  const {user} = useAuth();
+  const doctorId = user?.uid;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] =
     useState<'all' | PatientStatus>('all');
@@ -94,6 +100,9 @@ const PatientManagementScreen: React.FC = () => {
     null,
   );
   const [showModal, setShowModal] = useState(false);
+  const [inviteModal, setInviteModal] = useState(false);
+  const [creatingInvite, setCreatingInvite] = useState(false);
+  const [latestInvite, setLatestInvite] = useState<DoctorInvite | null>(null);
   const {data = [], isLoading, isFetching} = useLinkedPatientsQuery();
 
   const decoratedPatients = useMemo(() => {
@@ -140,6 +149,40 @@ const PatientManagementScreen: React.FC = () => {
     );
   };
 
+  const createInvite = async () => {
+    if (!doctorId) {
+      Alert.alert('Not signed in', 'Please sign in again to create invites.');
+      return;
+    }
+    try {
+      setCreatingInvite(true);
+      const invite = await DoctorPatientLinkService.createInvite(doctorId);
+      setLatestInvite(invite);
+      setInviteModal(true);
+    } catch (error) {
+      Alert.alert(
+        'Could not create invite',
+        'Please check your connection and try again.',
+      );
+    } finally {
+      setCreatingInvite(false);
+    }
+  };
+
+  const shareInvite = async () => {
+    if (!latestInvite) {
+      return;
+    }
+    try {
+      await Share.share({
+        title: 'LifeBand doctor invite',
+        message: `Scan this LifeBand QR code or enter manually:\nInvite ID: ${latestInvite.id}\nCode: ${latestInvite.code}`,
+      });
+    } catch (error) {
+      console.log('Share invite failed', error);
+    }
+  };
+
   return (
     <ScreenBackground>
       {firstLoad ? (
@@ -179,6 +222,21 @@ const PatientManagementScreen: React.FC = () => {
               <Text style={styles.statLabel}>Pending</Text>
             </View>
           </View>
+
+          <TouchableOpacity
+            style={[
+              styles.addPatientButton,
+              creatingInvite && styles.addPatientButtonDisabled,
+            ]}
+            disabled={creatingInvite}
+            onPress={createInvite}>
+            {creatingInvite ? (
+              <ActivityIndicator color={palette.textOnPrimary} />
+            ) : (
+              <Text style={styles.addPatientLabel}>Add patient (QR link)</Text>
+            )}
+            <Text style={styles.addPatientHint}>Generate a one-time QR/code to link</Text>
+          </TouchableOpacity>
 
           <TextInput
             style={styles.searchInput}
@@ -325,6 +383,58 @@ const PatientManagementScreen: React.FC = () => {
               onPress={() => setShowModal(false)}>
               <Text style={styles.modalCloseLabel}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={inviteModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setInviteModal(false)}>
+        <View style={styles.inviteOverlay}>
+          <View style={styles.inviteCard}>
+            <Text style={styles.inviteTitle}>Share this with your patient</Text>
+            <Text style={styles.inviteCopy}>
+              They can scan the QR or enter the code to link with you.
+            </Text>
+            <View style={styles.qrWrapper}>
+              {latestInvite ? (
+                <QRCode
+                  value={`${latestInvite.id}|${latestInvite.code}`}
+                  size={180}
+                  backgroundColor={palette.surface}
+                  color={palette.textPrimary}
+                />
+              ) : (
+                <ActivityIndicator color={palette.primary} />
+              )}
+            </View>
+            {latestInvite ? (
+              <View style={styles.inviteMetaRow}>
+                <View>
+                  <Text style={styles.inviteMetaLabel}>Invite ID</Text>
+                  <Text style={styles.inviteMetaValue}>{latestInvite.id}</Text>
+                </View>
+                <View>
+                  <Text style={styles.inviteMetaLabel}>Code</Text>
+                  <Text style={styles.inviteCode}>{latestInvite.code}</Text>
+                </View>
+              </View>
+            ) : null}
+            <View style={styles.inviteActions}>
+              <TouchableOpacity
+                style={[styles.inviteBtn, styles.inviteSecondary]}
+                onPress={() => setInviteModal(false)}>
+                <Text style={styles.inviteSecondaryLabel}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.inviteBtn, styles.invitePrimary]}
+                onPress={shareInvite}
+                disabled={!latestInvite}>
+                <Text style={styles.invitePrimaryLabel}>Share</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -509,6 +619,26 @@ const styles = StyleSheet.create({
   loaderLabelText: {
     color: palette.textSecondary,
   },
+  addPatientButton: {
+    backgroundColor: palette.primary,
+    borderRadius: radii.lg,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  addPatientButtonDisabled: {
+    opacity: 0.7,
+  },
+  addPatientLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  addPatientHint: {
+    color: palette.textOnPrimary,
+    opacity: 0.85,
+    marginTop: 2,
+    fontSize: 12,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
@@ -555,6 +685,80 @@ const styles = StyleSheet.create({
   modalCloseLabel: {
     color: palette.textPrimary,
     fontWeight: '600',
+  },
+  inviteOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  inviteCard: {
+    width: '100%',
+    backgroundColor: palette.card,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+  },
+  inviteTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: palette.textPrimary,
+  },
+  inviteCopy: {
+    color: palette.textSecondary,
+    marginTop: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  qrWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+    backgroundColor: palette.surface,
+    borderRadius: radii.md,
+    marginBottom: spacing.md,
+  },
+  inviteMetaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  inviteMetaLabel: {
+    color: palette.textSecondary,
+    fontSize: 12,
+  },
+  inviteMetaValue: {
+    color: palette.textPrimary,
+    fontWeight: '700',
+  },
+  inviteCode: {
+    color: palette.primary,
+    fontWeight: '800',
+    fontSize: 18,
+  },
+  inviteActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  inviteBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    alignItems: 'center',
+  },
+  invitePrimary: {
+    backgroundColor: palette.primary,
+  },
+  invitePrimaryLabel: {
+    color: palette.textOnPrimary,
+    fontWeight: '700',
+  },
+  inviteSecondary: {
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  inviteSecondaryLabel: {
+    color: palette.textPrimary,
+    fontWeight: '700',
   },
 });
 
